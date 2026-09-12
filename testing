@@ -520,17 +520,55 @@ local function getLocalAsset(path)
 end
 
 local function loadObjectsFromLocal(path)
-    local assetUri = getLocalAsset(path)
-    if not assetUri then return nil, "Executor tidak menyediakan getcustomasset/getsynasset" end
+    path = normalizeLocalPath(path)
+    local attempts = {}
 
-    local ok, objects = pcall(function()
-        return game:GetObjects(assetUri)
-    end)
-    if ok and type(objects) == "table" and #objects > 0 then
-        return objects
+    -- 1) Studio/Studio Lite local loader when exposed by the environment.
+    if type(InsertService.LoadLocalAsset) == "function" then
+        local ok, result = pcall(function()
+            return InsertService:LoadLocalAsset(path)
+        end)
+        if ok and result then
+            if result:IsA("Model") or result:IsA("Folder") or result:IsA("BasePart") or result:IsA("LuaSourceContainer") then
+                return {result}
+            end
+            table.insert(attempts, "LoadLocalAsset mengembalikan tipe " .. tostring(result.ClassName))
+        else
+            table.insert(attempts, "LoadLocalAsset: " .. tostring(result))
+        end
     end
 
-    return nil, "getcustomasset berhasil, tetapi Roblox gagal membuka RBXM"
+    -- 2) Executor custom-asset bridge.
+    local assetUri = getLocalAsset(path)
+    if assetUri then
+        local ok, objects = pcall(function()
+            return game:GetObjects(assetUri)
+        end)
+        if ok and type(objects) == "table" and #objects > 0 then
+            return objects
+        end
+        table.insert(attempts, "GetObjects(customasset) gagal")
+
+        local ok2, objects2 = pcall(function()
+            return game:GetObjects("rbxasset://" .. path)
+        end)
+        if ok2 and type(objects2) == "table" and #objects2 > 0 then
+            return objects2
+        end
+        table.insert(attempts, "GetObjects(rbxasset://path) gagal")
+    else
+        table.insert(attempts, "getcustomasset/getsynasset tidak tersedia")
+    end
+
+    -- 3) Beberapa executor menerima path lokal secara langsung.
+    local ok3, objects3 = pcall(function()
+        return game:GetObjects(path)
+    end)
+    if ok3 and type(objects3) == "table" and #objects3 > 0 then
+        return objects3
+    end
+
+    return nil, table.concat(attempts, " | ")
 end
 
 local function loadFile(fileInfo)
@@ -566,17 +604,26 @@ local function loadFile(fileInfo)
         return false, "File terbuka tetapi object tidak bisa dimasukkan ke Workspace"
     end
 
-    -- Fallback untuk executor lama.
-    local ok2, objects2 = pcall(function()
-        return game:GetObjects("rbxasset://" .. path)
-    end)
-    if ok2 and type(objects2) == "table" and #objects2 > 0 then
-        for _, obj in ipairs(objects2) do captureLiveSources(obj) end
-        local count = insertObjects(objects2, isRbxl, sourceMap)
-        if count > 0 then return true, count .. " object(s) loaded" end
+    -- Fallback tambahan: beberapa environment menerima URI lokal secara langsung.
+    local fallbackUris = {
+        path,
+        "rbxasset://" .. path
+    }
+    local custom = getLocalAsset(path)
+    if custom then table.insert(fallbackUris, 1, custom) end
+
+    for _, uri in ipairs(fallbackUris) do
+        local ok2, objects2 = pcall(function()
+            return game:GetObjects(uri)
+        end)
+        if ok2 and type(objects2) == "table" and #objects2 > 0 then
+            for _, obj in ipairs(objects2) do captureLiveSources(obj) end
+            local count = insertObjects(objects2, isRbxl, sourceMap)
+            if count > 0 then return true, count .. " object(s) loaded" end
+        end
     end
 
-    return false, loadErr or "RBXM tidak bisa dibuka oleh executor ini"
+    return false, "RBXM gagal dibuka. Pastikan file .rbxm/.rbxmx benar, berada di folder yang bisa dibaca executor, dan environment mendukung LoadLocalAsset/getcustomasset. " .. tostring(loadErr or "")
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -1005,14 +1052,33 @@ local function LoadMainScript()
         local ToolboxAsset = ""
         local toolboxResultButtons = {}
 
-        ToolboxTab:Dropdown({
-            Title = "Asset Type",
-            Values = {"MODEL", "DECAL", "AUDIO"},
-            Value = "MODEL",
-            Callback = function(value)
-                ToolboxKind = tostring(value or "MODEL"):upper()
+        -- Asset type dibuat sebagai tombol pilihan agar selalu terlihat di HP/Studio Lite.
+        local typeButtons = {}
+        local function refreshToolboxTypeButtons()
+            for name, btn in pairs(typeButtons) do
+                pcall(function()
+                    btn.BackgroundColor3 = (name == ToolboxKind) and Color3.fromRGB(70,70,70) or Color3.fromRGB(28,28,32)
+                    btn.TextColor3 = (name == ToolboxKind) and Color3.fromRGB(255,255,255) or Color3.fromRGB(175,175,185)
+                end)
             end
-        })
+        end
+        for _, kindName in ipairs({"MODEL", "DECAL", "AUDIO"}) do
+            local b = ToolboxTab:Button({
+                Title = kindName .. (kindName == "MODEL" and "  ✓" or ""),
+                Desc = "Pilih tipe " .. kindName,
+                Callback = function()
+                    ToolboxKind = kindName
+                    for name, btn in pairs(typeButtons) do
+                        pcall(function()
+                            btn.BackgroundColor3 = (name == ToolboxKind) and Color3.fromRGB(70,70,70) or Color3.fromRGB(28,28,32)
+                        end)
+                    end
+                    Notify("Toolbox", "Tipe dipilih: " .. ToolboxKind)
+                end
+            })
+            typeButtons[kindName] = b
+        end
+        refreshToolboxTypeButtons()
 
         ToolboxTab:Input({
             Title = "Creator Store Search",
