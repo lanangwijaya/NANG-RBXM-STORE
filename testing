@@ -1,27 +1,136 @@
+--[[
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║  NANG RBXM v63.0 - Black & White UI Edition    ║
+    ║  Features: Black & White UI only; system logic unchanged           ║
+    ║  FULL ACCESS: Semua fitur tersedia untuk UserId whitelist                                  ║
+    ╚══════════════════════════════════════════════════════════════════════╝
+]]
 
-local Services = {
-    Players = game:GetService("Players"),
-    RunService = game:GetService("RunService"),
-    UserInputService = game:GetService("UserInputService"),
-    Lighting = game:GetService("Lighting"),
-    TeleportService = game:GetService("TeleportService"),
-    HttpService = game:GetService("HttpService"),
-    Stats = game:GetService("Stats"),
-    ProximityPromptService = game:GetService("ProximityPromptService"),
-    TweenService = game:GetService("TweenService"),
-    VirtualUser = game:GetService("VirtualUser")
+-- NANG SAFE EXECUTE WRAPPER
+-- Semua inisialisasi dijalankan di dalam xpcall agar error pada fitur opsional
+-- tidak membuat script berhenti tanpa pesan.
+local __NANG_MAIN_OK = false
+local __NANG_MAIN_ERR = nil
+
+local function __NANG_RUN_MAIN()
+    if not game:IsLoaded() then
+        pcall(function() game.Loaded:Wait() end)
+    end
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- ACCESS GATE — WHITELIST ONLY
+-- ═══════════════════════════════════════════════════════════════════════
+-- Hanya UserId yang terdaftar di _WHITELIST yang boleh menggunakan NANG RBXM.
+-- UserId lain langsung dikeluarkan dan tidak pernah membuat UI utama.
+local _WHITELIST = {
+    10370966620,
+    8153244285,
+    9218615280,
+    9810200508,
+    9451353705,
+    8236629801,
+    10825136275,
+    8902706566,
+    7355968889,
+    10774723762,
+    9214202918,
+    11191545522,
+    11264166178,
+    172732271,
+    9100523005,
+    9516448806,
+    10950645546,
+    11004255643,
+    8356649880,
+    10363021496,
+    8768936755,
+    7900111839,
+    9411784854,
+    8785695722,
+    10109081111,
 }
 
-local LocalPlayer = Services.Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local DiscordURL = "https://discord.gg/DPbJMHGD"
+local _player = game:GetService("Players").LocalPlayer
+local _userId = _player.UserId
+local _isVIP = false
 
--- ======================================================================
--- NANG RBXM + TOOLBOX BACKEND
--- ======================================================================
+for _, id in ipairs(_WHITELIST) do
+    if id == _userId then
+        _isVIP = true
+        break
+    end
+end
+
+if not _isVIP then
+    pcall(function()
+        _player:Kick("NANG RBXM\n\nAkses ditolak.\nUserId kamu tidak terdaftar di whitelist/id kamu ilang di whitelist langsung chat owner.")
+    end)
+    return
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SERVICES & UTILITIES
+-- ═══════════════════════════════════════════════════════════════════════
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
 local InsertService = game:GetService("InsertService")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
+local LocalPlayer = Players.LocalPlayer
+local CoreDest = pcall(function() return CoreGui.Name end) and CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+
+_G.LANGZ_RAW_SOURCES = _G.LANGZ_RAW_SOURCES or {}
+
+
+-- Pemetaan Icon Vektor Lucide (High Resolution & Clean Vector Mask)
+local ICONS = {
+    PACKAGE        = "rbxassetid://10709791437",
+    SEARCH         = "rbxassetid://10709796118",
+    CLOSE          = "rbxassetid://10709790644",
+    MINIMIZE       = "rbxassetid://10709790387",
+    CHEVRON_RIGHT  = "rbxassetid://10709782525",
+    CHEVRON_LEFT   = "rbxassetid://10709782230",
+    BELL           = "rbxassetid://10709791160",
+    GAMEPAD        = "rbxassetid://10709790082",
+    FILE           = "rbxassetid://10709790948",
+    DOWNLOAD       = "rbxassetid://10709791283",
+    CHECK          = "rbxassetid://10709790240",
+    ALERT          = "rbxassetid://10709790520",
+    FOLDER         = "rbxassetid://10709790172",
+    REFRESH        = "rbxassetid://10709793382"
+}
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- HTTP REQUEST UTILITY
+-- ═══════════════════════════════════════════════════════════════════════
+local function httpRequest(url, method, headers, data)
+    method = method or "GET"
+    headers = headers or {}
+    headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    local requestFuncs = {
+        function() if syn and syn.request then local r = syn.request({Url = url, Method = method, Headers = headers, Body = data}); return r.Body, r.StatusCode end end,
+        function() if request then local r = request({Url = url, Method = method, Headers = headers, Body = data}); return r.Body, r.StatusCode end end,
+        function() if http_request then local r = http_request({Url = url, Method = method, Headers = headers, Body = data}); return r.Body, r.StatusCode end end,
+        function() if fluxus and fluxus.request then local r = fluxus.request({Url = url, Method = method, Headers = headers, Body = data}); return r.Body, r.StatusCode end end,
+        function() return HttpService:GetAsync(url, true), 200 end,
+        function() return game:HttpGet(url, true), 200 end
+    }
+    for _, fn in ipairs(requestFuncs) do
+        local ok, body, status = pcall(fn)
+        if ok and body and type(body) == "string" and #body > 0 then
+            return body, status or 200
+        end
+    end
+    return nil, nil
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
 -- RBXM FILE PARSER (LZ4 + Binary Format)
 -- ═══════════════════════════════════════════════════════════════════════
 local function Buffer(str, allowOverflows)
@@ -521,56 +630,111 @@ end
 
 local function loadObjectsFromLocal(path)
     path = normalizeLocalPath(path)
-    local attempts = {}
 
-    -- 1) Studio/Studio Lite local loader when exposed by the environment.
-    if type(InsertService.LoadLocalAsset) == "function" then
-        local ok, result = pcall(function()
-            return InsertService:LoadLocalAsset(path)
-        end)
+    -- ============================================================
+    -- NANG SAFE LOCAL RBXM LOADER
+    -- Mencoba semua loader yang umum tersedia di Android/Studio Lite.
+    -- Tidak langsung error hanya karena satu method tidak tersedia.
+    -- ============================================================
+    local errors = {}
+
+    local function tryLoad(label, fn)
+        local ok, result = pcall(fn)
         if ok and result then
-            if result:IsA("Model") or result:IsA("Folder") or result:IsA("BasePart") or result:IsA("LuaSourceContainer") then
+            if type(result) == "table" and #result > 0 then
+                return result
+            end
+            -- Beberapa environment mengembalikan Instance tunggal.
+            if typeof(result) == "Instance" then
                 return {result}
             end
-            table.insert(attempts, "LoadLocalAsset mengembalikan tipe " .. tostring(result.ClassName))
-        else
-            table.insert(attempts, "LoadLocalAsset: " .. tostring(result))
+        elseif not ok then
+            table.insert(errors, label .. ": " .. tostring(result))
         end
+        return nil
     end
 
-    -- 2) Executor custom-asset bridge.
-    local assetUri = getLocalAsset(path)
-    if assetUri then
-        local ok, objects = pcall(function()
-            return game:GetObjects(assetUri)
+    -- 1. Studio/compatible local asset loader.
+    if type(LoadLocalAsset) == "function" then
+        local objects = tryLoad("LoadLocalAsset", function()
+            return LoadLocalAsset(path)
         end)
-        if ok and type(objects) == "table" and #objects > 0 then
-            return objects
-        end
-        table.insert(attempts, "GetObjects(customasset) gagal")
+        if objects then return objects end
+    end
 
-        local ok2, objects2 = pcall(function()
-            return game:GetObjects("rbxasset://" .. path)
+    if InsertService and type(InsertService.LoadLocalAsset) == "function" then
+        local objects = tryLoad("InsertService.LoadLocalAsset", function()
+            return InsertService:LoadLocalAsset(path)
         end)
-        if ok2 and type(objects2) == "table" and #objects2 > 0 then
-            return objects2
+        if objects then return objects end
+    end
+
+    -- 2. Executor local-asset providers.
+    local providers = {}
+    if type(getcustomasset) == "function" then
+        table.insert(providers, {"getcustomasset", getcustomasset})
+    end
+    if type(getsynasset) == "function" then
+        table.insert(providers, {"getsynasset", getsynasset})
+    end
+    if type(getgenv) == "function" then
+        local ok, env = pcall(getgenv)
+        if ok and type(env) == "table" then
+            if type(env.getcustomasset) == "function" then
+                table.insert(providers, {"getgenv.getcustomasset", env.getcustomasset})
+            end
+            if type(env.getsynasset) == "function" then
+                table.insert(providers, {"getgenv.getsynasset", env.getsynasset})
+            end
         end
-        table.insert(attempts, "GetObjects(rbxasset://path) gagal")
-    else
-        table.insert(attempts, "getcustomasset/getsynasset tidak tersedia")
     end
 
-    -- 3) Beberapa executor menerima path lokal secara langsung.
-    local ok3, objects3 = pcall(function()
-        return game:GetObjects(path)
-    end)
-    if ok3 and type(objects3) == "table" and #objects3 > 0 then
-        return objects3
+    for _, providerInfo in ipairs(providers) do
+        local providerName, provider = providerInfo[1], providerInfo[2]
+        local okAsset, assetUri = pcall(provider, path)
+
+        if okAsset and type(assetUri) == "string" and assetUri ~= "" then
+            -- GetObjects dengan URI hasil provider.
+            local objects = tryLoad(providerName .. " -> GetObjects", function()
+                return game:GetObjects(assetUri)
+            end)
+            if objects then return objects end
+
+            -- Beberapa executor hanya menerima URI rbxasset://.
+            local variants = {
+                "rbxasset://" .. path,
+                "rbxasset:///" .. path,
+                "rbxassetid://" .. path
+            }
+
+            for _, uri in ipairs(variants) do
+                objects = tryLoad(providerName .. " -> " .. uri, function()
+                    return game:GetObjects(uri)
+                end)
+                if objects then return objects end
+            end
+        end
     end
 
-    return nil, table.concat(attempts, " | ")
+    -- 3. Direct GetObjects variants. Ada environment yang bisa
+    -- membaca file lokal tanpa getcustomasset.
+    local directVariants = {
+        path,
+        "file://" .. path,
+        "rbxasset://" .. path,
+        "rbxasset:///" .. path
+    }
+
+    for _, uri in ipairs(directVariants) do
+        local objects = tryLoad("GetObjects(" .. uri .. ")", function()
+            return game:GetObjects(uri)
+        end)
+        if objects then return objects end
+    end
+
+    return nil, (#errors > 0 and errors[#errors]) or
+        "RBXM belum bisa dibuka oleh environment ini. Loader lokal tidak tersedia."
 end
-
 local function loadFile(fileInfo)
     local isRbxl = fileInfo.ftype == "RBXL"
     local path = normalizeLocalPath(fileInfo.path)
@@ -604,26 +768,17 @@ local function loadFile(fileInfo)
         return false, "File terbuka tetapi object tidak bisa dimasukkan ke Workspace"
     end
 
-    -- Fallback tambahan: beberapa environment menerima URI lokal secara langsung.
-    local fallbackUris = {
-        path,
-        "rbxasset://" .. path
-    }
-    local custom = getLocalAsset(path)
-    if custom then table.insert(fallbackUris, 1, custom) end
-
-    for _, uri in ipairs(fallbackUris) do
-        local ok2, objects2 = pcall(function()
-            return game:GetObjects(uri)
-        end)
-        if ok2 and type(objects2) == "table" and #objects2 > 0 then
-            for _, obj in ipairs(objects2) do captureLiveSources(obj) end
-            local count = insertObjects(objects2, isRbxl, sourceMap)
-            if count > 0 then return true, count .. " object(s) loaded" end
-        end
+    -- Fallback untuk executor lama.
+    local ok2, objects2 = pcall(function()
+        return game:GetObjects("rbxasset://" .. path)
+    end)
+    if ok2 and type(objects2) == "table" and #objects2 > 0 then
+        for _, obj in ipairs(objects2) do captureLiveSources(obj) end
+        local count = insertObjects(objects2, isRbxl, sourceMap)
+        if count > 0 then return true, count .. " object(s) loaded" end
     end
 
-    return false, "RBXM gagal dibuka. Pastikan file .rbxm/.rbxmx benar, berada di folder yang bisa dibaca executor, dan environment mendukung LoadLocalAsset/getcustomasset. " .. tostring(loadErr or "")
+    return false, loadErr or "RBXM tidak bisa dibuka oleh executor ini"
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -779,6 +934,7 @@ local function insertToolboxAsset(value, kind, assetName)
 end
 
 
+-- ═══════════════════════════════════════════════════════════════════════
 -- CREATOR STORE MODEL SEARCH
 -- ═══════════════════════════════════════════════════════════════════════
 local Scroll, EmptyFrame, notify
@@ -849,1564 +1005,1548 @@ local function searchCreatorModels(keyword, pageNumber, assetType)
     return false, lastError
 end
 
-
-
-if PlayerGui:FindFirstChild("NangIntroGui") then PlayerGui.NangIntroGui:Destroy() end
-if PlayerGui:FindFirstChild("NangCrosshairGui") then PlayerGui.NangCrosshairGui:Destroy() end
-if PlayerGui:FindFirstChild("NangESPBillboardFolder") then PlayerGui.NangESPBillboardFolder:Destroy() end
-if workspace:FindFirstChild("NangESPWorldFolder") then workspace.NangESPWorldFolder:Destroy() end
-
-local function PlayVipIntroAnimation(callback)
-    local IntroGui = Instance.new("ScreenGui")
-    IntroGui.Name = "NangIntroGui"
-    IntroGui.ResetOnSpawn = false
-    IntroGui.Parent = PlayerGui
-
-    local CenterFrame = Instance.new("Frame")
-    CenterFrame.Size = UDim2.new(0, 350, 0, 110)
-    CenterFrame.Position = UDim2.new(0.5, -175, 0.5, -55)
-    CenterFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-    CenterFrame.BackgroundTransparency = 1
-    CenterFrame.BorderSizePixel = 0
-    CenterFrame.Parent = IntroGui
-
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 8)
-    Corner.Parent = CenterFrame
-
-    local Stroke = Instance.new("UIStroke")
-    Stroke.Color = Color3.fromRGB(0, 255, 120)
-    Stroke.Thickness = 1.5
-    Stroke.Transparency = 1
-    Stroke.Parent = CenterFrame
-
-    local EmojiLabel = Instance.new("TextLabel")
-    EmojiLabel.Size = UDim2.new(1, 0, 0, 45)
-    EmojiLabel.Position = UDim2.new(0, 0, 0, 12)
-    EmojiLabel.BackgroundTransparency = 1
-    EmojiLabel.Text = "⚡"
-    EmojiLabel.TextColor3 = Color3.fromRGB(0, 255, 120)
-    EmojiLabel.TextSize = 28
-    EmojiLabel.Font = Enum.Font.GothamBold
-    EmojiLabel.TextTransparency = 1
-    EmojiLabel.Parent = CenterFrame
-
-    local TextLabel = Instance.new("TextLabel")
-    TextLabel.Size = UDim2.new(1, 0, 0, 30)
-    TextLabel.Position = UDim2.new(0, 0, 0, 62)
-    TextLabel.BackgroundTransparency = 1
-    TextLabel.Text = "INITIALIZING NANG VIP..."
-    TextLabel.TextColor3 = Color3.fromRGB(240, 240, 250)
-    TextLabel.TextSize = 11
-    TextLabel.Font = Enum.Font.Code
-    TextLabel.TextTransparency = 1
-    TextLabel.Parent = CenterFrame
-
-    Services.TweenService:Create(CenterFrame, TweenInfo.new(0.4), {BackgroundTransparency = 0.15}):Play()
-    Services.TweenService:Create(Stroke, TweenInfo.new(0.4), {Transparency = 0.2}):Play()
-    Services.TweenService:Create(EmojiLabel, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
-    Services.TweenService:Create(TextLabel, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
-
-    task.delay(0.6, function()
-        EmojiLabel.Text = "💎"
-        TextLabel.Text = "LOADING NANG LIBRARY..."
-    end)
-
-    task.delay(1.3, function()
-        EmojiLabel.Text = "🔥"
-        TextLabel.Text = "ACCESS GRANTED: WELCOME NANG!"
-    end)
-
-    task.delay(2.1, function()
-        Services.TweenService:Create(CenterFrame, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play()
-        Services.TweenService:Create(Stroke, TweenInfo.new(0.4), {Transparency = 1}):Play()
-        Services.TweenService:Create(EmojiLabel, TweenInfo.new(0.4), {TextTransparency = 1}):Play()
-        Services.TweenService:Create(TextLabel, TweenInfo.new(0.4), {TextTransparency = 1}):Play()
-        task.wait(0.4)
-        IntroGui:Destroy()
-        if callback then callback() end
-    end)
-end
-
-local function MakeDraggable(frame)
-    local dragging, dragInput, dragStart, startPos
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
+local function clearScrollCards()
+    if SearchScroll then
+        for _, c in ipairs(SearchScroll:GetChildren()) do
+            if c:IsA("Frame") and c ~= SearchEmptyFrame then c:Destroy() end
         end
-    end)
-
-    frame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    Services.UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-end
-
-local function LoadMainScript()
-    PlayVipIntroAnimation(function()
-        local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
-
-        WindUI:AddTheme({
-            Name = "NangDarkNeon",
-            Accent = Color3.fromRGB(0, 255, 120),
-            Outline = Color3.fromRGB(40, 40, 50),
-            Text = Color3.fromRGB(240, 240, 250),
-            PlaceholderText = Color3.fromRGB(120, 120, 140),
-            Background = Color3.fromRGB(12, 12, 16),
-            WindowBackground = Color3.fromRGB(15, 15, 20),
-            WindowOutline = Color3.fromRGB(0, 255, 120),
-            ButtonBackground = Color3.fromRGB(22, 22, 30),
-            ButtonBackgroundHover = Color3.fromRGB(0, 255, 120),
-            ToggleBackground = Color3.fromRGB(22, 22, 30),
-            ToggleEnabled = Color3.fromRGB(0, 255, 120),
-        })
-
-        local Window = WindUI:CreateWindow({
-            Title = "NANG",
-            Icon = "zap",
-            Author = "NANG",
-            Folder = "NangVIP",
-            Size = UDim2.fromOffset(450, 320),
-            Theme = "NangDarkNeon",
-            Transparent = true,
-            SideBarWidth = 120,
-            HasOutline = true,
-        })
-
-        local Toggles = {
-            Aimbot = false, ESP = false, Tracers = false, Speed = false, Jump = false,
-            NoClip = false, InfJump = false, Fly = false, Fullbright = false, AntiAFK = false,
-            ClickTP = false, InstantPrompt = false, SpinBot = false, FPSBooster = false,
-            Crosshair = false, AutoRejoin = false, AutoClicker = false, AutoCollect = false,
-            SpectateTarget = false, TPToTarget = false, ESPTarget = false, AnnoyTarget = false,
-            LiftTarget = false, ESPInfo = false
-        }
-
-        local Values = {
-            SpeedVal = 45, JumpVal = 90, AimFOV = 180, CamFOV = 70, GravityVal = 196.2,
-            FlySpeed = 50, SpinSpeed = 30, ClickCPS = 10, MyScriptURL = "https://pastebin.com/raw/PASTE_KODE_KAMU_DISINI",
-            SelectedTargetName = "",
-            AvatarUsername = "",
-            AvatarUserId = "",
-            SessionStart = os.clock(),
-            NotifyEnabled = true,
-            Language = "Indonesia"
-        }
-
-        local function Notify(msg)
-            if Values.NotifyEnabled == false then return end
-            WindUI:Notify({
-                Title = "NANG",
-                Content = msg,
-                Duration = 2
-            })
-        end
-
-        local InfoTab = Window:Tab({ Title = "Info", Icon = "info" })
-        local CombatTab = Window:Tab({ Title = "Combat", Icon = "sword" })
-        local ExploitTab = Window:Tab({ Title = "Exploit", Icon = "cpu" })
-        local TargetTab = Window:Tab({ Title = "Target", Icon = "target" })
-        local VisualTab = Window:Tab({ Title = "Visual", Icon = "eye" })
-        local WorldTab = Window:Tab({ Title = "World", Icon = "globe" })
-        local FarmTab = Window:Tab({ Title = "Farm", Icon = "gem" })
-        local ScriptTab = Window:Tab({ Title = "Script", Icon = "file-code" })
-        local ServerTab = Window:Tab({ Title = "Server", Icon = "server" })
-        local AvatarTab = Window:Tab({ Title = "Avatar", Icon = "user" })
-        local QuickTab = Window:Tab({ Title = "Quick", Icon = "zap" })
-        local SessionTab = Window:Tab({ Title = "Session", Icon = "clock" })
-        local PerformanceTab = Window:Tab({ Title = "Performance", Icon = "activity" })
-        local ServerInfoTab = Window:Tab({ Title = "Server Info", Icon = "database" })
-        local SettingsTab = Window:Tab({ Title = "UI Settings", Icon = "settings" })
-        local DiagnosticsTab = Window:Tab({ Title = "Diagnostics", Icon = "terminal" })
-        local CreditsTab = Window:Tab({ Title = "Credits", Icon = "credit-card" })
-
-
-        -- ==================================================================
-        -- TOOLBOX
-        -- ==================================================================
-        local ToolboxTab = Window:Tab({ Title = "Toolbox", Icon = "package" })
-        local RBXMTab = Window:Tab({ Title = "RBXM", Icon = "file-code" })
-
-        ToolboxTab:Paragraph({
-            Title = "TOOLBOX",
-            Desc = "Creator Store search + insert asset. Model, Decal, dan Audio."
-        })
-
-        local ToolboxKeyword = ""
-        local ToolboxKind = "MODEL"
-        local ToolboxAsset = ""
-        local toolboxResultButtons = {}
-
-        -- Asset type dibuat sebagai tombol pilihan agar selalu terlihat di HP/Studio Lite.
-        local typeButtons = {}
-        local function refreshToolboxTypeButtons()
-            for name, btn in pairs(typeButtons) do
-                pcall(function()
-                    btn.BackgroundColor3 = (name == ToolboxKind) and Color3.fromRGB(70,70,70) or Color3.fromRGB(28,28,32)
-                    btn.TextColor3 = (name == ToolboxKind) and Color3.fromRGB(255,255,255) or Color3.fromRGB(175,175,185)
-                end)
-            end
-        end
-        for _, kindName in ipairs({"MODEL", "DECAL", "AUDIO"}) do
-            local b = ToolboxTab:Button({
-                Title = kindName .. (kindName == "MODEL" and "  ✓" or ""),
-                Desc = "Pilih tipe " .. kindName,
-                Callback = function()
-                    ToolboxKind = kindName
-                    for name, btn in pairs(typeButtons) do
-                        pcall(function()
-                            btn.BackgroundColor3 = (name == ToolboxKind) and Color3.fromRGB(70,70,70) or Color3.fromRGB(28,28,32)
-                        end)
-                    end
-                    Notify("Toolbox", "Tipe dipilih: " .. ToolboxKind)
-                end
-            })
-            typeButtons[kindName] = b
-        end
-        refreshToolboxTypeButtons()
-
-        ToolboxTab:Input({
-            Title = "Creator Store Search",
-            Placeholder = "contoh: car, house, tree...",
-            Callback = function(value)
-                ToolboxKeyword = tostring(value or "")
-            end
-        })
-
-        ToolboxTab:Button({
-            Title = "SEARCH CREATOR STORE",
-            Desc = "Cari asset sesuai tipe yang dipilih",
-            Callback = function()
-                local keyword = ToolboxKeyword:gsub("^%s+", ""):gsub("%s+$", "")
-                if keyword == "" then
-                    Notify("Masukkan kata kunci Creator Store")
-                    return
-                end
-
-                local ok, results, err = searchCreatorModels(keyword, 0, ToolboxKind)
-                if not ok then
-                    Notify("Creator Store gagal: " .. tostring(results or err))
-                    return
-                end
-
-                if type(results) ~= "table" or #results == 0 then
-                    Notify("Tidak ada " .. ToolboxKind .. " untuk: " .. keyword)
-                    return
-                end
-
-                for _, btn in ipairs(toolboxResultButtons) do
-                    pcall(function() btn:Destroy() end)
-                end
-                toolboxResultButtons = {}
-
-                Notify(tostring(#results) .. " hasil ditemukan")
-                local maxResults = math.min(#results, 12)
-                for i = 1, maxResults do
-                    local item = results[i]
-                    local btn = ToolboxTab:Button({
-                        Title = string.format("%02d • %s", i, tostring(item.name)),
-                        Desc = string.format("ID: %d | Creator: %s | %s", item.id, tostring(item.creator), tostring(item.kind)),
-                        Callback = function()
-                            local success, message = insertToolboxAsset(item.id, item.kind, "NANG_" .. tostring(item.id))
-                            Notify(success and ("Inserted: " .. tostring(message)) or ("Insert gagal: " .. tostring(message)))
-                        end
-                    })
-                    if btn then table.insert(toolboxResultButtons, btn) end
-                end
-            end
-        })
-
-        ToolboxTab:Input({
-            Title = "Asset ID / URL",
-            Placeholder = "contoh: 123456789 atau rbxassetid://123456789",
-            Callback = function(value)
-                ToolboxAsset = tostring(value or "")
-            end
-        })
-
-        ToolboxTab:Button({
-            Title = "INSERT ASSET",
-            Desc = "Masukkan asset langsung ke Workspace",
-            Callback = function()
-                local value = ToolboxAsset:gsub("%s+", "")
-                if value == "" then
-                    Notify("Masukkan Asset ID atau URL")
-                    return
-                end
-                local ok, msg = insertToolboxAsset(value, ToolboxKind, "NANG_" .. tostring(extractAssetId(value) or "Asset"))
-                Notify(ok and ("Import berhasil: " .. tostring(msg)) or ("Import gagal: " .. tostring(msg)))
-            end
-        })
-
-        ToolboxTab:Paragraph({
-            Title = "INFO",
-            Desc = "Audio ditempatkan di Workspace.NANG_MUSIC. Model/Decal memakai loader Toolbox."
-        })
-
-        -- ==================================================================
-        -- RBXM / RBXMX
-        -- ==================================================================
-        RBXMTab:Paragraph({
-            Title = "RBXM IMPORTER",
-            Desc = "Scan file lokal lalu load RBXM/RBXMX ke Workspace. Dukungan tergantung environment."
-        })
-
-        local RBXMPath = ""
-        local RBXMSelected = ""
-        local RBXMFiles = {}
-        local RBXMNames = {}
-
-        local RBXMFileDropdown = RBXMTab:Dropdown({
-            Title = "File hasil scan",
-            Values = {"Belum scan"},
-            Value = "Belum scan",
-            Callback = function(value)
-                RBXMSelected = tostring(value or "")
-                for _, item in ipairs(RBXMFiles) do
-                    if item.name == RBXMSelected then
-                        RBXMPath = item.path
-                        break
-                    end
-                end
-            end
-        })
-
-        RBXMTab:Button({
-            Title = "SCAN RBXM / RBXMX",
-            Desc = "Cari file dari folder umum executor Android",
-            Callback = function()
-                local all = scanAll()
-                RBXMFiles = {}
-                RBXMNames = {}
-                for _, item in ipairs(all or {}) do
-                    if item.ftype == "RBXM" then
-                        table.insert(RBXMFiles, item)
-                        table.insert(RBXMNames, item.name)
-                    end
-                end
-
-                if #RBXMNames == 0 then
-                    RBXMFileDropdown:Refresh({"Tidak ada RBXM/RBXMX"})
-                    RBXMSelected = ""
-                    RBXMPath = ""
-                    Notify("File RBXM/RBXMX tidak ditemukan")
-                    return
-                end
-
-                RBXMFileDropdown:Refresh(RBXMNames)
-                RBXMSelected = RBXMNames[1]
-                RBXMPath = RBXMFiles[1].path
-                Notify(tostring(#RBXMNames) .. " file ditemukan")
-            end
-        })
-
-        RBXMTab:Input({
-            Title = "Path File Manual",
-            Placeholder = "contoh: /sdcard/Download/model.rbxm",
-            Callback = function(value)
-                RBXMPath = tostring(value or "")
-            end
-        })
-
-        RBXMTab:Button({
-            Title = "LOAD RBXM / RBXMX",
-            Desc = "Load file yang dipilih atau path manual",
-            Callback = function()
-                local path = tostring(RBXMPath or ""):gsub("^%s+", ""):gsub("%s+$", "")
-                if path == "" then
-                    Notify("Pilih file hasil scan atau masukkan path manual")
-                    return
-                end
-
-                local low = path:lower()
-                local ftype = (low:match("%.rbxmx$") or low:match("%.rbxm$")) and "RBXM" or nil
-                if not ftype then
-                    Notify("Path harus berakhiran .rbxm atau .rbxmx")
-                    return
-                end
-
-                local ok, msg = loadFile({path = path, ftype = ftype})
-                Notify(ok and ("RBXM berhasil: " .. tostring(msg)) or ("RBXM gagal: " .. tostring(msg)))
-            end
-        })
-
-        RBXMTab:Paragraph({
-            Title = "FORMAT",
-            Desc = "✓ .rbxm\n✓ .rbxmx\n\nJika scan kosong, gunakan Path File Manual."
-        })
-
-        InfoTab:Paragraph({
-            Title = "NANG",
-            Desc = "• Nang Sayang Abl😘💖\n• Avatar changer by username/User ID\n• Status: Premium Active"
-        })
-
-        InfoTab:Button({
-            Title = "Copy Invite Discord",
-            Desc = "Salin link Discord",
-            Callback = function()
-                pcall(function() 
-                    if setclipboard then setclipboard(DiscordURL) 
-                    elseif toclipboard then toclipboard(DiscordURL) end 
-                end)
-                Notify("Discord Link Copied!")
-            end
-        })
-
-        local FPSState = {
-            Frames = 0,
-            LastSample = os.clock(),
-            Value = 0
-        }
-
-        Services.RunService.RenderStepped:Connect(function()
-            FPSState.Frames = FPSState.Frames + 1
-            local now = os.clock()
-            if now - FPSState.LastSample >= 1 then
-                FPSState.Value = math.floor(FPSState.Frames / (now - FPSState.LastSample))
-                FPSState.Frames = 0
-                FPSState.LastSample = now
-            end
-        end)
-
-        local function FormatDuration(seconds)
-            seconds = math.max(0, math.floor(seconds or 0))
-            local hours = math.floor(seconds / 3600)
-            local minutes = math.floor((seconds % 3600) / 60)
-            local secs = seconds % 60
-            return string.format("%02d:%02d:%02d", hours, minutes, secs)
-        end
-
-        local function GetPingText()
-            local ping = "N/A"
-            pcall(function()
-                local item = Services.Stats.Network.ServerStatsItem["Data Ping"]
-                ping = item:GetValueString()
-            end)
-            return ping
-        end
-
-        local function CopyText(text)
-            local copied = false
-            pcall(function()
-                if setclipboard then
-                    setclipboard(tostring(text))
-                    copied = true
-                elseif toclipboard then
-                    tostring(text)
-                    copied = true
-                end
-            end)
-            return copied
-        end
-
-        QuickTab:Paragraph({
-            Title = "QUICK ACCESS",
-            Desc = "Akses cepat untuk profil, status karakter, dan reset lokal."
-        })
-
-        local CommandText = ""
-        QuickTab:Input({
-            Title = "Command Palette",
-            Placeholder = "profile / status / reset / server / performance",
-            Callback = function(text)
-                CommandText = tostring(text or ""):lower()
-            end
-        })
-
-        QuickTab:Button({
-            Title = "▶ Jalankan Command",
-            Callback = function()
-                if CommandText == "profile" then
-                    Notify(string.format("@%s | User ID: %d", LocalPlayer.Name, LocalPlayer.UserId))
-                elseif CommandText == "status" then
-                    local char = LocalPlayer.Character
-                    local hum = char and char:FindFirstChildOfClass("Humanoid")
-                    Notify(hum and string.format("HP: %d | Speed: %d | Jump: %d", hum.Health, hum.WalkSpeed, hum.JumpPower) or "Karakter belum siap")
-                elseif CommandText == "reset" then
-                    Values.CamFOV = 70
-                    Values.GravityVal = 196.2
-                    if workspace.CurrentCamera then workspace.CurrentCamera.FieldOfView = 70 end
-                    workspace.Gravity = 196.2
-                    Notify("Camera FOV dan gravity di-reset")
-                elseif CommandText == "server" then
-                    Notify(string.format("%d pemain | Ping %s", #Services.Players:GetPlayers(), GetPingText()))
-                elseif CommandText == "performance" then
-                    Notify(string.format("FPS: %d | Ping: %s", FPSState.Value, GetPingText()))
-                else
-                    Notify("Command tidak dikenal")
-                end
-            end
-        })
-
-        QuickTab:Button({
-            Title = "📋 Copy Username & User ID",
-            Callback = function()
-                local profile = string.format("@%s | User ID: %d", LocalPlayer.Name, LocalPlayer.UserId)
-                Notify(CopyText(profile) and "Profil berhasil disalin" or profile)
-            end
-        })
-
-        QuickTab:Button({
-            Title = "📊 Status Karakter",
-            Callback = function()
-                local char = LocalPlayer.Character
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    Notify(string.format("HP: %d | Speed: %d | Jump: %d", hum.Health, hum.WalkSpeed, hum.JumpPower))
-                else
-                    Notify("Karakter belum siap")
-                end
-            end
-        })
-
-        QuickTab:Button({
-            Title = "↩ Reset Camera & World",
-            Callback = function()
-                Values.CamFOV = 70
-                Values.GravityVal = 196.2
-                if workspace.CurrentCamera then
-                    workspace.CurrentCamera.FieldOfView = 70
-                end
-                workspace.Gravity = 196.2
-                Notify("Camera FOV dan gravity di-reset")
-            end
-        })
-
-        SessionTab:Paragraph({
-            Title = "SESSION INFO",
-            Desc = string.format(
-                "Durasi: %s\nPemain: %d\nPlace ID: %d",
-                FormatDuration(os.clock() - Values.SessionStart),
-                #Services.Players:GetPlayers(),
-                game.PlaceId
-            )
-        })
-
-        SessionTab:Button({
-            Title = "🔄 Refresh Session Status",
-            Callback = function()
-                Notify(string.format(
-                    "Durasi %s | %d pemain",
-                    FormatDuration(os.clock() - Values.SessionStart),
-                    #Services.Players:GetPlayers()
-                ))
-            end
-        })
-
-        SessionTab:Button({
-            Title = "📋 Copy Job ID",
-            Callback = function()
-                Notify(CopyText(game.JobId) and "Job ID berhasil disalin" or game.JobId)
-            end
-        })
-
-        PerformanceTab:Paragraph({
-            Title = "PERFORMANCE DASHBOARD",
-            Desc = "Pantau FPS, ping, dan penggunaan memori sesi."
-        })
-
-        PerformanceTab:Button({
-            Title = "📈 Cek FPS / Ping / Memory",
-            Callback = function()
-                local memory = "N/A"
-                pcall(function()
-                    memory = string.format("%.1f MB", collectgarbage("count") / 1024)
-                end)
-                Notify(string.format("FPS: %d | Ping: %s | Memory: %s", FPSState.Value, GetPingText(), memory))
-            end
-        })
-
-        PerformanceTab:Toggle({
-            Title = "Lightweight Lighting",
-            Value = false,
-            Callback = function(state)
-                Services.Lighting.GlobalShadows = not state
-                Notify(state and "Lighting ringan aktif" or "Lighting normal dipulihkan")
-            end
-        })
-
-        ServerInfoTab:Paragraph({
-            Title = "SERVER INFORMATION",
-            Desc = string.format(
-                "Place ID: %d\nJob ID: %s\nPemain: %d/%d\nPing: %s",
-                game.PlaceId,
-                game.JobId ~= "" and game.JobId or "Studio/Private",
-                #Services.Players:GetPlayers(),
-                Services.Players.MaxPlayers,
-                GetPingText()
-            )
-        })
-
-        ServerInfoTab:Button({
-            Title = "🔄 Refresh Server Info",
-            Callback = function()
-                Notify(string.format("%d pemain | Ping %s", #Services.Players:GetPlayers(), GetPingText()))
-            end
-        })
-
-        SettingsTab:Paragraph({
-            Title = "UI SETTINGS",
-            Desc = "Atur bahasa notifikasi dan tampilan dasar."
-        })
-
-        SettingsTab:Dropdown({
-            Title = "Bahasa Notifikasi",
-            Values = {"Indonesia", "English"},
-            Value = Values.Language,
-            Callback = function(value)
-                Values.Language = value
-                Notify(value == "English" and "Notification language: English" or "Bahasa notifikasi: Indonesia")
-            end
-        })
-
-        SettingsTab:Dropdown({
-            Title = "Preset Lighting",
-            Values = {"Default", "Performance"},
-            Value = "Default",
-            Callback = function(value)
-                Services.Lighting.GlobalShadows = value ~= "Performance"
-                Notify(value == "Performance" and "Preset Performance aktif" or "Preset Default aktif")
-            end
-        })
-
-        SettingsTab:Toggle({
-            Title = "Tampilkan Notifikasi",
-            Value = true,
-            Callback = function(state)
-                Values.NotifyEnabled = state
-                if state then Notify("Notifikasi diaktifkan") end
-            end
-        })
-
-        SettingsTab:Button({
-            Title = "🎨 Terapkan Theme Neon",
-            Callback = function()
-                WindUI:SetTheme("NangDarkNeon")
-                Notify("Theme Neon diterapkan")
-            end
-        })
-
-        DiagnosticsTab:Paragraph({
-            Title = "DIAGNOSTICS",
-            Desc = "Pemeriksaan dasar environment dan cleanup UI lokal."
-        })
-
-        DiagnosticsTab:Button({
-            Title = "🔍 Check Environment",
-            Callback = function()
-                local checks = {
-                    "loadstring=" .. tostring(loadstring ~= nil),
-                    "HttpGet=" .. tostring(game.HttpGet ~= nil),
-                    "writefile=" .. tostring(writefile ~= nil),
-                    "readfile=" .. tostring(readfile ~= nil),
-                    "clipboard=" .. tostring(setclipboard ~= nil or toclipboard ~= nil)
-                }
-                Notify(table.concat(checks, " | "))
-            end
-        })
-
-        DiagnosticsTab:Button({
-            Title = "🧹 Cleanup UI Lokal",
-            Callback = function()
-                for _, name in ipairs({"NangIntroGui", "NangCrosshairGui"}) do
-                    local gui = PlayerGui:FindFirstChild(name)
-                    if gui then gui:Destroy() end
-                end
-                Notify("UI lokal yang tidak diperlukan dibersihkan")
-            end
-        })
-
-        DiagnosticsTab:Button({
-            Title = "🛑 Reset Nilai Lokal",
-            Callback = function()
-                Values.CamFOV = 70
-                Values.GravityVal = 196.2
-                Services.Lighting.GlobalShadows = true
-                if workspace.CurrentCamera then workspace.CurrentCamera.FieldOfView = 70 end
-                workspace.Gravity = 196.2
-                Notify("Nilai lokal dipulihkan")
-            end
-        })
-
-        CombatTab:Toggle({
-            Title = "Aimbot Lock (Hold RMB)",
-            Value = false,
-            Callback = function(state)
-                Toggles.Aimbot = state
-                Notify(state and "Aimbot Enabled" or "Aimbot Disabled")
-            end
-        })
-
-        CombatTab:Slider({
-            Title = "Aim FOV Radius",
-            Value = {Min = 50, Max = 500, Default = 180},
-            Step = 1,
-            Callback = function(val)
-                Values.AimFOV = val
-            end
-        })
-
-        CombatTab:Toggle({
-            Title = "Custom Crosshair",
-            Value = false,
-            Callback = function(state)
-                Toggles.Crosshair = state
-                Notify(state and "Crosshair Enabled" or "Crosshair Disabled")
-            end
-        })
-
-        CombatTab:Toggle({
-            Title = "SpinBot (Anti-Aim)",
-            Value = false,
-            Callback = function(state)
-                Toggles.SpinBot = state
-                Notify(state and "SpinBot Enabled" or "SpinBot Disabled")
-            end
-        })
-
-        ExploitTab:Toggle({
-            Title = "ESP Wallhack",
-            Value = false,
-            Callback = function(state)
-                Toggles.ESP = state
-                Notify(state and "ESP Enabled" or "ESP Disabled")
-            end
-        })
-
-        ExploitTab:Toggle({
-            Title = "Tracers Line ESP",
-            Value = false,
-            Callback = function(state)
-                Toggles.Tracers = state
-                Notify(state and "Tracers Enabled" or "Tracers Disabled")
-            end
-        })
-
-        ExploitTab:Toggle({
-            Title = "ESP Info (Name / HP / Distance)",
-            Value = false,
-            Callback = function(state)
-                Toggles.ESPInfo = state
-                Notify(state and "ESP Info Enabled" or "ESP Info Disabled")
-            end
-        })
-
-        ExploitTab:Toggle({
-            Title = "Speed Boost",
-            Value = false,
-            Callback = function(state)
-                Toggles.Speed = state
-                Notify(state and "Speed Enabled" or "Speed Disabled")
-            end
-        })
-
-        ExploitTab:Slider({
-            Title = "Speed Value",
-            Value = {Min = 16, Max = 500, Default = 45},
-            Step = 1,
-            Callback = function(val)
-                Values.SpeedVal = val
-            end
-        })
-
-        ExploitTab:Toggle({
-            Title = "High Jump",
-            Value = false,
-            Callback = function(state)
-                Toggles.Jump = state
-                Notify(state and "Jump Enabled" or "Jump Disabled")
-            end
-        })
-
-        ExploitTab:Slider({
-            Title = "Jump Power",
-            Value = {Min = 50, Max = 500, Default = 90},
-            Step = 1,
-            Callback = function(val)
-                Values.JumpVal = val
-            end
-        })
-
-        ExploitTab:Toggle({
-            Title = "NoClip",
-            Value = false,
-            Callback = function(state)
-                Toggles.NoClip = state
-                Notify(state and "NoClip Enabled" or "NoClip Disabled")
-            end
-        })
-
-        ExploitTab:Toggle({
-            Title = "Infinite Jump",
-            Value = false,
-            Callback = function(state)
-                Toggles.InfJump = state
-                Notify(state and "Inf Jump Enabled" or "Inf Jump Disabled")
-            end
-        })
-
-        ExploitTab:Toggle({
-            Title = "Fly Mode",
-            Value = false,
-            Callback = function(state)
-                Toggles.Fly = state
-                Notify(state and "Fly Enabled" or "Fly Disabled")
-            end
-        })
-
-        ExploitTab:Toggle({
-            Title = "Click Teleport (Ctrl+Click)",
-            Value = false,
-            Callback = function(state)
-                Toggles.ClickTP = state
-                Notify(state and "Click TP Enabled" or "Click TP Disabled")
-            end
-        })
-
-        ExploitTab:Toggle({
-            Title = "Instant ProximityPrompt",
-            Value = false,
-            Callback = function(state)
-                Toggles.InstantPrompt = state
-                if state then
-                    Services.ProximityPromptService.PromptButtonHoldBegan:Connect(function(prompt)
-                        if Toggles.InstantPrompt then fireproximityprompt(prompt) end
-                    end)
-                end
-                Notify(state and "Instant Prompt Enabled" or "Instant Prompt Disabled")
-            end
-        })
-
-        local playerListNames = {}
-        for _, p in pairs(Services.Players:GetPlayers()) do
-            if p ~= LocalPlayer then table.insert(playerListNames, p.Name) end
-        end
-
-        local TargetDropdown = TargetTab:Dropdown({
-            Title = "Select Target",
-            Values = playerListNames,
-            Value = "",
-            Callback = function(selected)
-                Values.SelectedTargetName = selected
-            end
-        })
-
-        Services.Players.PlayerAdded:Connect(function(p)
-            if p ~= LocalPlayer then
-                table.insert(playerListNames, p.Name)
-                TargetDropdown:Refresh(playerListNames)
-            end
-        end)
-
-        Services.Players.PlayerRemoving:Connect(function(p)
-            for i, name in ipairs(playerListNames) do
-                if name == p.Name then
-                    table.remove(playerListNames, i)
-                    break
-                end
-            end
-            TargetDropdown:Refresh(playerListNames)
-        end)
-
-        local function GetTargetPlayer()
-            if Values.SelectedTargetName == "" then return nil end
-            return Services.Players:FindFirstChild(Values.SelectedTargetName)
-        end
-
-        TargetTab:Toggle({
-            Title = "Intai Target (Spectate)",
-            Value = false,
-            Callback = function(state)
-                Toggles.SpectateTarget = state
-                if not state then
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                        workspace.CurrentCamera.CameraSubject = LocalPlayer.Character.Humanoid
-                    end
-                end
-                Notify(state and "Spectate Enabled" or "Spectate Disabled")
-            end
-        })
-
-        TargetTab:Toggle({
-            Title = "TP ke Target",
-            Value = false,
-            Callback = function(state)
-                Toggles.TPToTarget = state
-                if state then
-                    local target = GetTargetPlayer()
-                    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                            LocalPlayer.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0)
-                            Notify("Teleported!")
-                        end
-                    else
-                        Notify("Pilih target dulu!")
-                    end
-                end
-            end
-        })
-
-        TargetTab:Toggle({
-            Title = "ESP Target",
-            Value = false,
-            Callback = function(state)
-                Toggles.ESPTarget = state
-                Notify(state and "Target ESP Enabled" or "Target ESP Disabled")
-            end
-        })
-
-        TargetTab:Toggle({
-            Title = "🌀 Ganggu Target",
-            Value = false,
-            Callback = function(state)
-                Toggles.AnnoyTarget = state
-                Notify(state and "Annoy Enabled" or "Annoy Disabled")
-            end
-        })
-
-        TargetTab:Toggle({
-            Title = "🦾 Angkat Target",
-            Value = false,
-            Callback = function(state)
-                Toggles.LiftTarget = state
-                Notify(state and "Lift Enabled" or "Lift Disabled")
-            end
-        })
-
-        TargetTab:Button({
-            Title = "⏹ Stop Semua Aksi Target",
-            Callback = function()
-                Toggles.SpectateTarget = false
-                Toggles.TPToTarget = false
-                Toggles.ESPTarget = false
-                Toggles.AnnoyTarget = false
-                Toggles.LiftTarget = false
-                Notify("Semua aksi target dihentikan")
-            end
-        })
-
-        VisualTab:Button({
-            Title = "Theme: Neon Green",
-            Callback = function()
-                WindUI:SetTheme("NangDarkNeon")
-                Notify("Theme applied")
-            end
-        })
-
-        WorldTab:Slider({
-            Title = "Camera FOV",
-            Value = {Min = 50, Max = 120, Default = 70},
-            Step = 1,
-            Callback = function(val)
-                Values.CamFOV = val
-                if workspace.CurrentCamera then
-                    workspace.CurrentCamera.FieldOfView = val
-                end
-            end
-        })
-
-        WorldTab:Slider({
-            Title = "World Gravity",
-            Value = {Min = 0, Max = 300, Default = 196},
-            Step = 1,
-            Callback = function(val)
-                Values.GravityVal = val
-                workspace.Gravity = val
-            end
-        })
-
-        WorldTab:Button({
-            Title = "↩ Reset Camera FOV & Gravity",
-            Callback = function()
-                Values.CamFOV = 70
-                Values.GravityVal = 196.2
-                if workspace.CurrentCamera then
-                    workspace.CurrentCamera.FieldOfView = Values.CamFOV
-                end
-                workspace.Gravity = Values.GravityVal
-                Notify("Camera FOV dan World Gravity di-reset")
-            end
-        })
-
-        WorldTab:Toggle({
-            Title = "Fullbright (Anti Dark)",
-            Value = false,
-            Callback = function(state)
-                Toggles.Fullbright = state
-                Services.Lighting.Ambient = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(128, 128, 128)
-                Services.Lighting.Brightness = state and 2 or 1
-                Notify(state and "Fullbright Enabled" or "Fullbright Disabled")
-            end
-        })
-
-        WorldTab:Toggle({
-            Title = "FPS Booster (Lag Fix)",
-            Value = false,
-            Callback = function(state)
-                Toggles.FPSBooster = state
-                if state then
-                    Services.Lighting.GlobalShadows = false
-                    for _, v in pairs(workspace:GetDescendants()) do
-                        if v:IsA("BasePart") then 
-                            v.Material = Enum.Material.Plastic 
-                            v.Reflectance = 0
-                        elseif v:IsA("Decal") or v:IsA("Texture") then 
-                            v:Destroy()
-                        elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then 
-                            v.Enabled = false 
-                        end
-                    end
-                end
-                Notify(state and "FPS Booster Enabled" or "FPS Booster Disabled")
-            end
-        })
-
-        WorldTab:Toggle({
-            Title = "Anti-AFK",
-            Value = false,
-            Callback = function(state)
-                Toggles.AntiAFK = state
-                if Toggles.AntiAFK then
-                    if not Toggles._AntiAFKConnection then
-                        Toggles._AntiAFKConnection = LocalPlayer.Idled:Connect(function()
-                            pcall(function()
-                                Services.VirtualUser:CaptureController()
-                                Services.VirtualUser:ClickButton2(Vector2.new())
-                            end)
-                        end)
-                    end
-                elseif Toggles._AntiAFKConnection then
-                    Toggles._AntiAFKConnection:Disconnect()
-                    Toggles._AntiAFKConnection = nil
-                end
-                Notify(state and "Anti-AFK Enabled" or "Anti-AFK Disabled")
-            end
-        })
-
-        FarmTab:Toggle({
-            Title = "Auto Clicker",
-            Value = false,
-            Callback = function(state)
-                Toggles.AutoClicker = state
-                Notify(state and "Auto Clicker Enabled" or "Auto Clicker Disabled")
-            end
-        })
-
-        FarmTab:Slider({
-            Title = "Click CPS",
-            Value = {Min = 1, Max = 30, Default = 10},
-            Step = 1,
-            Callback = function(val)
-                Values.ClickCPS = val
-            end
-        })
-
-        FarmTab:Toggle({
-            Title = "Auto-Collect Drops",
-            Value = false,
-            Callback = function(state)
-                Toggles.AutoCollect = state
-                Notify(state and "Auto Collect Enabled" or "Auto Collect Disabled")
-            end
-        })
-
-        ScriptTab:Input({
-            Title = "Pastebin RAW URL",
-            Placeholder = "URL...",
-            Callback = function(text)
-                Values.MyScriptURL = text
-            end
-        })
-
-        ScriptTab:Button({
-            Title = "Execute Custom Script",
-            Callback = function()
-                local success, err = pcall(function() loadstring(game:HttpGet(Values.MyScriptURL))() end)
-                Notify(success and "Script Executed!" or "Execution Failed")
-            end
-        })
-
-        ServerTab:Button({
-            Title = "Rejoin Same Server",
-            Callback = function()
-                Notify("Rejoining...")
-                Services.TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
-            end
-        })
-
-        ServerTab:Button({
-            Title = "Server Hop",
-            Callback = function()
-                Notify("Searching server...")
-                pcall(function()
-                    local sfUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-                    local req = game:HttpGet(sfUrl)
-                    local body = Services.HttpService:JSONDecode(req)
-                    if body and body.data then
-                        for _, v in pairs(body.data) do
-                            if type(v) == "table" and v.playing < v.maxPlayers and v.id ~= game.JobId then
-                                Services.TeleportService:TeleportToPlaceInstance(game.PlaceId, v.id, LocalPlayer)
-                                break
-                            end
-                        end
-                    end
-                end)
-            end
-        })
-
-        ServerTab:Toggle({
-            Title = "Auto Rejoin on Kick",
-            Value = false,
-            Callback = function(state)
-                Toggles.AutoRejoin = state
-                Notify(state and "Auto Rejoin Enabled" or "Auto Rejoin Disabled")
-            end
-        })
-
-        CreditsTab:Paragraph({
-            Title = "CREDITS",
-            Desc = "DEVELOPER: NANG\nNANG 2026"
-        })
-
-        local CrosshairGui = Instance.new("ScreenGui")
-        CrosshairGui.Name = "NangCrosshairGui"
-        CrosshairGui.ResetOnSpawn = false
-        CrosshairGui.IgnoreGuiInset = true
-        CrosshairGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-        CrosshairGui.Parent = PlayerGui
-
-        local CrosshairFrame = Instance.new("Frame")
-        CrosshairFrame.Size = UDim2.new(0, 4, 0, 4)
-        CrosshairFrame.Position = UDim2.new(0.5, -2, 0.5, -2)
-        CrosshairFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 120)
-        CrosshairFrame.BorderSizePixel = 0
-        CrosshairFrame.Visible = false
-        CrosshairFrame.Parent = CrosshairGui
-
-        local CHCorner = Instance.new("UICorner")
-        CHCorner.CornerRadius = UDim.new(1, 0)
-        CHCorner.Parent = CrosshairFrame
-
-        local Aiming = false
-        Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
-            if input.UserInputType == Enum.UserInputType.MouseButton2 then
-                Aiming = true
-            end
-            if Toggles.ClickTP and not gameProcessed and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and Services.UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
-                local mouse = LocalPlayer:GetMouse()
-                if mouse.Hit and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
-                end
-            end
-        end)
-
-        Services.UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton2 then
-                Aiming = false
-            end
-        end)
-
-        local ESPWorldFolder = Instance.new("Folder")
-        ESPWorldFolder.Name = "NangESPWorldFolder"
-        ESPWorldFolder.Parent = workspace
-
-        local ESPBillboardFolder = Instance.new("Folder")
-        ESPBillboardFolder.Name = "NangESPBillboardFolder"
-        ESPBillboardFolder.Parent = PlayerGui
-
-        local ESPTracerContainer = Instance.new("Frame")
-        ESPTracerContainer.Name = "NangESPTracerContainer"
-        ESPTracerContainer.Size = UDim2.fromScale(1, 1)
-        ESPTracerContainer.BackgroundTransparency = 1
-        ESPTracerContainer.BorderSizePixel = 0
-        ESPTracerContainer.Parent = CrosshairGui
-
-        local PlayerThumbnailCache = {}
-        local function GetPlayerThumbnail(plr)
-            if PlayerThumbnailCache[plr.UserId] then
-                return PlayerThumbnailCache[plr.UserId]
-            end
-            local success, content = pcall(function()
-                return Services.Players:GetUserThumbnailAsync(
-                    plr.UserId,
-                    Enum.ThumbnailType.HeadShot,
-                    Enum.ThumbnailSize.Size100x100
-                )
-            end)
-            if success and content then
-                PlayerThumbnailCache[plr.UserId] = content
-                return content
-            end
-            return ""
-        end
-
-        Services.RunService.RenderStepped:Connect(function()
-            CrosshairFrame.Visible = Toggles.Crosshair
-
-            if Toggles.Aimbot and Aiming then
-                local targetHead = nil
-                local dist = Values.AimFOV
-                local mousePos = Services.UserInputService:GetMouseLocation()
-                for _, plr in pairs(Services.Players:GetPlayers()) do
-                    if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
-                        local screenPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(plr.Character.Head.Position)
-                        if onScreen then
-                            local mag = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                            if mag < dist then 
-                                dist = mag 
-                                targetHead = plr.Character.Head 
-                            end
-                        end
-                    end
-                end
-                if targetHead then 
-                    workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, targetHead.Position) 
-                end
-            end
-
-            if Toggles.SpectateTarget then
-                local target = GetTargetPlayer()
-                if target and target.Character and target.Character:FindFirstChild("Humanoid") then
-                    workspace.CurrentCamera.CameraSubject = target.Character.Humanoid
-                end
-            end
-
-            ESPWorldFolder:ClearAllChildren()
-            ESPBillboardFolder:ClearAllChildren()
-            for _, child in ipairs(ESPTracerContainer:GetChildren()) do
-                child:Destroy()
-            end
-
-            if Toggles.ESP or Toggles.Tracers or Toggles.ESPTarget or Toggles.ESPInfo then
-                local camera = workspace.CurrentCamera
-                local viewport = camera and camera.ViewportSize
-                for _, plr in pairs(Services.Players:GetPlayers()) do
-                    if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
-                        local isSelectedTarget = Toggles.ESPTarget and plr.Name == Values.SelectedTargetName
-
-                        if Toggles.ESP or isSelectedTarget then
-                            local hl = Instance.new("Highlight")
-                            hl.Adornee = plr.Character
-                            hl.FillColor = Color3.fromRGB(0, 255, 120)
-                            hl.FillTransparency = 0.5
-                            hl.Parent = ESPWorldFolder
-                        end
-
-                        if Toggles.Tracers and camera and viewport then
-                            local screenPos, onScreen = camera:WorldToViewportPoint(plr.Character.Head.Position)
-                            if onScreen and screenPos.Z > 0 then
-                                local startPos = Vector2.new(viewport.X / 2, viewport.Y)
-                                local endPos = Vector2.new(screenPos.X, screenPos.Y)
-                                local delta = endPos - startPos
-                                local line = Instance.new("Frame")
-                                line.Name = "Tracer_" .. plr.Name
-                                line.AnchorPoint = Vector2.new(0.5, 0.5)
-                                line.BorderSizePixel = 0
-                                line.BackgroundColor3 = isSelectedTarget and Color3.fromRGB(255, 220, 80) or Color3.fromRGB(0, 255, 120)
-                                line.BackgroundTransparency = 0.15
-                                line.Position = UDim2.fromOffset((startPos.X + endPos.X) / 2, (startPos.Y + endPos.Y) / 2)
-                                line.Size = UDim2.fromOffset(math.max(delta.Magnitude, 2), 2)
-                                line.Rotation = math.deg(math.atan2(delta.Y, delta.X))
-                                line.ZIndex = 5
-                                line.Parent = ESPTracerContainer
-                            end
-                        end
-
-                        if Toggles.ESPInfo or isSelectedTarget then
-                            local head = plr.Character.Head
-                            local targetHumanoid = plr.Character:FindFirstChildOfClass("Humanoid")
-                            local localRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                            local distance = localRoot and math.floor((localRoot.Position - head.Position).Magnitude) or 0
-
-                            local info = Instance.new("BillboardGui")
-                            info.Name = "Info_" .. plr.Name
-                            info.Adornee = head
-                            info.AlwaysOnTop = true
-                            info.Size = UDim2.fromOffset(250, 62)
-                            info.StudsOffset = Vector3.new(0, 2.8, 0)
-                            info.Parent = ESPBillboardFolder
-
-                            local avatar = Instance.new("ImageLabel")
-                            avatar.Name = "AvatarThumbnail"
-                            avatar.BackgroundColor3 = Color3.fromRGB(20, 25, 30)
-                            avatar.BackgroundTransparency = 0.15
-                            avatar.BorderSizePixel = 0
-                            avatar.Size = UDim2.fromOffset(48, 48)
-                            avatar.Position = UDim2.fromOffset(2, 7)
-                            avatar.Image = GetPlayerThumbnail(plr)
-                            avatar.Parent = info
-
-                            local avatarCorner = Instance.new("UICorner")
-                            avatarCorner.CornerRadius = UDim.new(0, 8)
-                            avatarCorner.Parent = avatar
-
-                            local text = Instance.new("TextLabel")
-                            text.BackgroundTransparency = 1
-                            text.Position = UDim2.fromOffset(56, 2)
-                            text.Size = UDim2.new(1, -58, 1, -4)
-                            text.Font = Enum.Font.GothamBold
-                            text.TextSize = 12
-                            text.TextWrapped = true
-                            text.TextXAlignment = Enum.TextXAlignment.Left
-                            text.TextYAlignment = Enum.TextYAlignment.Center
-                            text.TextStrokeTransparency = 0.35
-                            text.TextColor3 = isSelectedTarget and Color3.fromRGB(255, 220, 80) or Color3.fromRGB(240, 255, 245)
-                            text.Text = string.format(
-                                "%s\n@%s | ID: %d\nHP: %d | %dst",
-                                plr.DisplayName,
-                                plr.Name,
-                                plr.UserId,
-                                math.floor(targetHumanoid.Health),
-                                distance
-                            )
-                            text.Parent = info
-                        end
-                    end
-                end
-            end
-        end)
-
-        local SavedAvatarDescription = nil
-
-        local function ApplyAvatarFromInput(username, userIdText)
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if not hum then
-                Notify("Karakter belum siap")
-                return
-            end
-
-            local userId
-            local cleanUsername = tostring(username or ""):match("^%s*(.-)%s*$")
-            local cleanUserId = tostring(userIdText or ""):match("^%s*(%d+)%s*$")
-            if cleanUsername and cleanUsername ~= "" then
-                local success, resolvedId = pcall(function()
-                    return Services.Players:GetUserIdFromNameAsync(cleanUsername)
-                end)
-                if success then userId = resolvedId end
-            end
-            if not userId and cleanUserId then
-                userId = tonumber(cleanUserId)
-            end
-
-            if not userId then
-                Notify("Username atau User ID tidak valid")
-                return
-            end
-
-            if not SavedAvatarDescription then
-                pcall(function()
-                    SavedAvatarDescription = hum:GetAppliedDescription()
-                end)
-            end
-
-            local success, description = pcall(function()
-                if Services.Players.GetHumanoidDescriptionFromUserIdAsync then
-                    return Services.Players:GetHumanoidDescriptionFromUserIdAsync(userId)
-                end
-                return Services.Players:GetHumanoidDescriptionFromUserId(userId)
-            end)
-            if not success or not description then
-                Notify("Avatar publik gagal diambil")
-                return
-            end
-
-            local applied = pcall(function()
-                if hum.ApplyDescriptionReset then
-                    hum:ApplyDescriptionReset(description)
-                else
-                    hum:ApplyDescription(description)
-                end
-            end)
-            Notify(applied and "Avatar berhasil diterapkan secara lokal" or "Avatar tidak bisa diterapkan di rig ini")
-        end
-
-        AvatarTab:Paragraph({
-            Title = "👤 PROFIL SAYA",
-            Desc = string.format(
-                "%s\n@%s\nUser ID: %d\nUmur akun: %d hari",
-                LocalPlayer.DisplayName,
-                LocalPlayer.Name,
-                LocalPlayer.UserId,
-                LocalPlayer.AccountAge
-            )
-        })
-
-        AvatarTab:Button({
-            Title = "🔄 Refresh Info Avatar",
-            Callback = function()
-                Notify(string.format("@%s | User ID: %d", LocalPlayer.Name, LocalPlayer.UserId))
-            end
-        })
-
-        AvatarTab:Paragraph({
-            Title = "CHANGE AVATAR",
-            Desc = "Masukkan username Roblox atau User ID publik. Perubahan hanya terlihat secara lokal."
-        })
-
-        AvatarTab:Input({
-            Title = "Username Roblox",
-            Placeholder = "Contoh: Builderman",
-            Callback = function(text)
-                Values.AvatarUsername = tostring(text or "")
-            end
-        })
-
-        AvatarTab:Input({
-            Title = "User ID Roblox",
-            Placeholder = "Contoh: 156",
-            Callback = function(text)
-                Values.AvatarUserId = tostring(text or "")
-            end
-        })
-
-        AvatarTab:Button({
-            Title = "🧠 Terapkan Avatar",
-            Callback = function()
-                ApplyAvatarFromInput(Values.AvatarUsername, Values.AvatarUserId)
-            end
-        })
-
-        AvatarTab:Button({
-            Title = "↩ Restore Avatar Awal",
-            Callback = function()
-                local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                if hum and SavedAvatarDescription then
-                    local restored = pcall(function()
-                        hum:ApplyDescription(SavedAvatarDescription)
-                    end)
-                    Notify(restored and "Avatar awal dikembalikan" or "Avatar awal gagal dipulihkan")
-                else
-                    Notify("Avatar awal belum tersimpan")
-                end
-            end
-        })
-
-        ScriptTab:Button({
-            Title = "🛑 Panic Reset Semua Fitur",
-            Callback = function()
-                for key, value in pairs(Toggles) do
-                    if type(value) == "boolean" then Toggles[key] = false end
-                end
-                if Toggles._AntiAFKConnection then
-                    Toggles._AntiAFKConnection:Disconnect()
-                    Toggles._AntiAFKConnection = nil
-                end
-                if workspace.CurrentCamera then
-                    workspace.CurrentCamera.FieldOfView = 70
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-                        workspace.CurrentCamera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    end
-                end
-                workspace.Gravity = 196.2
-                Notify("Semua fitur di-reset")
-            end
-        })
-
-        Services.RunService.Heartbeat:Connect(function()
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChild("Humanoid")
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-
-            if hum then
-                if Toggles.Speed then hum.WalkSpeed = Values.SpeedVal end
-                if Toggles.Jump then hum.JumpPower = Values.JumpVal end
-            end
-
-            if Toggles.NoClip and char then
-                for _, part in pairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") then part.CanCollide = false end
-                end
-            end
-
-            if Toggles.SpinBot and hrp then
-                hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(Values.SpinSpeed), 0)
-            end
-
-            if Toggles.Fly and hrp then
-                local moveDir = hum and hum.MoveDirection or Vector3.zero
-                hrp.Velocity = Vector3.new(moveDir.X * Values.FlySpeed, 0, moveDir.Z * Values.FlySpeed)
-            end
-
-            local target = GetTargetPlayer()
-            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and hrp then
-                local tHrp = target.Character.HumanoidRootPart
-
-                if Toggles.LiftTarget then
-                    local targetCF = hrp.CFrame * CFrame.new(0, 4, 0)
-                    tHrp.CFrame = tHrp.CFrame:Lerp(targetCF, 0.18)
-                elseif Toggles.AnnoyTarget then
-                    local wobble = math.sin(tick() * 18) * 1.2
-                    local targetCF = tHrp.CFrame * CFrame.new(wobble, 0, -2.0) * CFrame.Angles(0, math.rad(180), 0)
-                    hrp.CFrame = hrp.CFrame:Lerp(targetCF, 0.18)
-                end
-            end
-        end)
-
-        Notify("NANG Ready")
-    end)
-end
-
--- ======================================================================
--- ACCESS GATE — WHITELIST ONLY
--- ======================================================================
--- Hanya UserId yang terdaftar di whitelist yang boleh menjalankan UI NANG.
-local _WHITELIST = {
-    10370966620,
-    8153244285,
-    9218615280,
-    9810200508,
-    9451353705,
-    8236629801,
-    10825136275,
-    8902706566,
-    7355968889,
-    10774723762,
-    9214202918,
-    11191545522,
-    11264166178,
-    172732271,
-    9100523005,
-    9516448806,
-    10950645546,
-    11004255643,
-    8356649880,
-    10363021496,
-    8768936755,
-    7900111839,
-}
-
-local _player = game:GetService("Players").LocalPlayer
-local _allowed = false
-
-for _, id in ipairs(_WHITELIST) do
-    if id == _player.UserId then
-        _allowed = true
-        break
     end
 end
 
-if not _allowed then
-    pcall(function()
-        _player:Kick("NANG\n\nAkses ditolak.\nUserId kamu tidak terdaftar di whitelist.")
+local function buildModelResultCard(info)
+    if not SearchScroll then return end
+    SearchEmptyFrame.Visible = false
+
+    local card = Instance.new("Frame", SearchScroll)
+    card.Size = UDim2.new(0, 150, 0, 178)
+    card.BackgroundColor3 = Color3.fromRGB(24,24,24)
+    card.BorderSizePixel = 0
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
+    local stroke = Instance.new("UIStroke", card)
+    stroke.Thickness = 1
+    stroke.Color = Color3.fromRGB(58,58,58)
+
+    local thumb = Instance.new("ImageLabel", card)
+    thumb.Size = UDim2.new(1, -12, 0, 92)
+    thumb.Position = UDim2.new(0, 6, 0, 6)
+    thumb.BackgroundColor3 = Color3.fromRGB(15,15,15)
+    thumb.BorderSizePixel = 0
+    thumb.Image = "rbxthumb://type=Asset&id=" .. tostring(info.id) .. "&w=420&h=420"
+    thumb.ScaleType = Enum.ScaleType.Crop
+    Instance.new("UICorner", thumb).CornerRadius = UDim.new(0, 8)
+
+    local badge = Instance.new("TextLabel", card)
+    badge.Size = UDim2.new(0, 50, 0, 18)
+    badge.Position = UDim2.new(1, -56, 0, 12)
+    badge.BackgroundColor3 = Color3.fromRGB(105,105,105)
+    badge.Text = tostring(info.kind or "MODEL")
+    badge.TextColor3 = Color3.new(1,1,1)
+    badge.Font = Enum.Font.GothamBold
+    badge.TextSize = 7
+    Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 5)
+
+    local name = Instance.new("TextLabel", card)
+    name.Size = UDim2.new(1, -12, 0, 24)
+    name.Position = UDim2.new(0, 6, 0, 102)
+    name.BackgroundTransparency = 1
+    name.Text = tostring(info.name)
+    name.TextColor3 = Color3.fromRGB(245,245,245)
+    name.Font = Enum.Font.GothamBold
+    name.TextSize = 10
+    name.TextXAlignment = Enum.TextXAlignment.Left
+    name.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local creator = Instance.new("TextLabel", card)
+    creator.Size = UDim2.new(1, -12, 0, 22)
+    creator.Position = UDim2.new(0, 6, 0, 126)
+    creator.BackgroundTransparency = 1
+    creator.Text = "by " .. tostring(info.creator) .. "\nID: " .. tostring(info.id)
+    creator.TextColor3 = Color3.fromRGB(145,145,145)
+    creator.Font = Enum.Font.Gotham
+    creator.TextSize = 7
+    creator.TextXAlignment = Enum.TextXAlignment.Left
+
+    local insert = Instance.new("TextButton", card)
+    insert.Size = UDim2.new(1, -12, 0, 26)
+    insert.Position = UDim2.new(0, 6, 1, -32)
+    insert.BackgroundColor3 = Color3.fromRGB(107,107,107)
+    insert.BorderSizePixel = 0
+    insert.Text = "INSERT"
+    insert.TextColor3 = Color3.new(1,1,1)
+    insert.Font = Enum.Font.GothamBold
+    insert.TextSize = 9
+    Instance.new("UICorner", insert).CornerRadius = UDim.new(0, 6)
+
+    insert.MouseButton1Click:Connect(function()
+        if insert.Text == "LOAD..." then return end
+        insert.Text = "LOAD..."
+        task.spawn(function()
+            local ok, msg = insertToolboxAsset(tostring(info.id), info.kind, info.name)
+            if ok then
+                insert.Text = "DONE"
+                insert.BackgroundColor3 = Color3.fromRGB(136,136,136)
+                if tostring(info.kind):upper() == "AUDIO" then
+                    notify("Music", tostring(info.name) .. " berhasil ditambahkan ke SoundService.", Color3.fromRGB(185,185,185))
+                else
+                    notify("Toolbox", tostring(info.name) .. " berhasil diinsert.", Color3.fromRGB(185,185,185))
+                end
+            else
+                insert.Text = "FAIL"
+                insert.BackgroundColor3 = Color3.fromRGB(78,78,78)
+                notify("Insert Gagal", tostring(msg), Color3.fromRGB(122,122,122))
+            end
+            task.wait(1.2)
+            insert.Text = "INSERT"
+            insert.BackgroundColor3 = Color3.fromRGB(107,107,107)
+        end)
     end)
-    return
 end
 
-LoadMainScript()
+-- ═══════════════════════════════════════════════════════════════════════
+-- DESTROY OLD UI
+-- ═══════════════════════════════════════════════════════════════════════
+if CoreDest:FindFirstChild("LANGZImporterUI") then CoreDest:FindFirstChild("LANGZImporterUI"):Destroy() end
+if CoreDest:FindFirstChild("LANGZImporterUI") then CoreDest:FindFirstChild("LANGZImporterUI"):Destroy() end
 
+local UI = Instance.new("ScreenGui", CoreDest)
+UI.Name = "LANGZImporterUI"; UI.ResetOnSpawn = false; UI.DisplayOrder = 100; UI.IgnoreGuiInset = true
+
+-- Modern dark atmosphere with purple accent.
+local HackerAtmosphere = Instance.new("Frame", UI)
+HackerAtmosphere.Name = "HackerAtmosphere"
+HackerAtmosphere.Size = UDim2.new(1, 0, 1, 0)
+HackerAtmosphere.Position = UDim2.new(0, 0, 0, 0)
+HackerAtmosphere.BackgroundColor3 = Color3.fromRGB(11,11,11)
+HackerAtmosphere.BackgroundTransparency = 0.84
+HackerAtmosphere.BorderSizePixel = 0
+HackerAtmosphere.ZIndex = 0
+HackerAtmosphere.Active = false
+
+-- Table untuk menampung UIGradient yang akan dianimasikan secara real-time
+local AnimatedGradients = {}
+
+local function registerGradientAnimation(gradient, speed, mode)
+    table.insert(AnimatedGradients, {
+        Gradient = gradient,
+        Speed = speed or 60,
+        Mode = mode or "rotate"
+    })
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- LOADING SCREEN — NANG RBXM ELEGANT
+-- Only this loading screen is used. The old Execute Fixed boot screen is removed.
+local LoadingScreen = Instance.new("Frame", UI)
+LoadingScreen.Name = "LoadingScreen"
+LoadingScreen.Size = UDim2.new(1, 0, 1, 0)
+LoadingScreen.BackgroundColor3 = Color3.fromRGB(8,8,8)
+LoadingScreen.BorderSizePixel = 0
+LoadingScreen.ZIndex = 999
+
+local Dim = Instance.new("Frame", LoadingScreen)
+Dim.Size = UDim2.new(1, 0, 1, 0)
+Dim.BackgroundColor3 = Color3.fromRGB(0,0,0)
+Dim.BackgroundTransparency = 0.18
+Dim.BorderSizePixel = 0
+Dim.ZIndex = 999
+
+local Card = Instance.new("Frame", LoadingScreen)
+Card.Name = "BootCard"
+Card.AnchorPoint = Vector2.new(0.5, 0.5)
+Card.Position = UDim2.new(0.5, 0, 0.5, 0)
+Card.Size = UDim2.new(0, 360, 0, 190)
+Card.BackgroundColor3 = Color3.fromRGB(18,18,18)
+Card.BorderSizePixel = 0
+Card.ZIndex = 1000
+Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 16)
+
+local CardStroke = Instance.new("UIStroke", Card)
+CardStroke.Thickness = 1
+CardStroke.Transparency = 0.25
+CardStroke.Color = Color3.fromRGB(103,103,103)
+
+local Accent = Instance.new("Frame", Card)
+Accent.Size = UDim2.new(0, 4, 1, -28)
+Accent.Position = UDim2.new(0, 0, 0, 14)
+Accent.BackgroundColor3 = Color3.fromRGB(103,103,103)
+Accent.BorderSizePixel = 0
+Accent.ZIndex = 1001
+Instance.new("UICorner", Accent).CornerRadius = UDim.new(1, 0)
+
+local Brand = Instance.new("TextLabel", Card)
+Brand.Size = UDim2.new(1, -48, 0, 36)
+Brand.Position = UDim2.new(0, 24, 0, 22)
+Brand.BackgroundTransparency = 1
+Brand.Text = "NANG RBXM"
+Brand.TextColor3 = Color3.fromRGB(245,245,245)
+Brand.Font = Enum.Font.GothamBold
+Brand.TextSize = 25
+Brand.TextXAlignment = Enum.TextXAlignment.Left
+Brand.ZIndex = 1001
+
+local Sub = Instance.new("TextLabel", Card)
+Sub.Size = UDim2.new(1, -48, 0, 20)
+Sub.Position = UDim2.new(0, 24, 0, 58)
+Sub.BackgroundTransparency = 1
+Sub.Text = "Preparing your workspace"
+Sub.TextColor3 = Color3.fromRGB(146,146,146)
+Sub.Font = Enum.Font.Gotham
+Sub.TextSize = 12
+Sub.TextXAlignment = Enum.TextXAlignment.Left
+Sub.ZIndex = 1001
+
+local Status = Instance.new("TextLabel", Card)
+Status.Size = UDim2.new(1, -48, 0, 18)
+Status.Position = UDim2.new(0, 24, 0, 96)
+Status.BackgroundTransparency = 1
+Status.Text = "Starting..."
+Status.TextColor3 = Color3.fromRGB(215,215,215)
+Status.Font = Enum.Font.GothamMedium
+Status.TextSize = 11
+Status.TextXAlignment = Enum.TextXAlignment.Left
+Status.ZIndex = 1001
+
+local Track = Instance.new("Frame", Card)
+Track.Size = UDim2.new(1, -48, 0, 6)
+Track.Position = UDim2.new(0, 24, 0, 123)
+Track.BackgroundColor3 = Color3.fromRGB(38,38,38)
+Track.BorderSizePixel = 0
+Track.ZIndex = 1001
+Instance.new("UICorner", Track).CornerRadius = UDim.new(1, 0)
+
+local Progress = Instance.new("Frame", Track)
+Progress.Size = UDim2.new(0, 0, 1, 0)
+Progress.BackgroundColor3 = Color3.fromRGB(103,103,103)
+Progress.BorderSizePixel = 0
+Progress.ZIndex = 1002
+Instance.new("UICorner", Progress).CornerRadius = UDim.new(1, 0)
+
+local Footer = Instance.new("TextLabel", Card)
+Footer.Size = UDim2.new(1, -48, 0, 18)
+Footer.Position = UDim2.new(0, 24, 0, 146)
+Footer.BackgroundTransparency = 1
+Footer.Text = "NANG RBXM"
+Footer.TextColor3 = Color3.fromRGB(92,92,92)
+Footer.Font = Enum.Font.Gotham
+Footer.TextSize = 9
+Footer.TextXAlignment = Enum.TextXAlignment.Left
+Footer.ZIndex = 1001
+
+local loadingActive = true
+local loadSteps = {
+    {"Starting...", 0.18},
+    {"Loading interface...", 0.45},
+    {"Preparing Toolbox...", 0.72},
+    {"Ready", 1},
+}
+
+task.spawn(function()
+    for _, step in ipairs(loadSteps) do
+        if not loadingActive or not LoadingScreen.Parent then return end
+        Status.Text = step[1]
+        TweenService:Create(
+            Progress,
+            TweenInfo.new(0.32, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {Size = UDim2.new(step[2], 0, 1, 0)}
+        ):Play()
+        task.wait(0.34)
+    end
+
+    task.wait(0.35)
+    if not LoadingScreen.Parent then return end
+
+    loadingActive = false
+    local fadeInfo = TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    TweenService:Create(Card, fadeInfo, {BackgroundTransparency = 1}):Play()
+    TweenService:Create(Dim, fadeInfo, {BackgroundTransparency = 1}):Play()
+    TweenService:Create(CardStroke, fadeInfo, {Transparency = 1}):Play()
+
+    for _, obj in ipairs(Card:GetDescendants()) do
+        if obj:IsA("TextLabel") then
+            TweenService:Create(obj, fadeInfo, {TextTransparency = 1}):Play()
+        elseif obj:IsA("Frame") and obj ~= Card then
+            TweenService:Create(obj, fadeInfo, {BackgroundTransparency = 1}):Play()
+        end
+    end
+
+    task.wait(0.32)
+    if LoadingScreen.Parent then LoadingScreen:Destroy() end
+end)
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- RenderStepped Animation Engine (60 FPS Smooth Movement)
+-- ═══════════════════════════════════════════════════════════════════════
+RunService.RenderStepped:Connect(function(deltaTime)
+    for _, anim in ipairs(AnimatedGradients) do
+        if anim.Gradient and anim.Gradient.Parent then
+            if anim.Mode == "rotate" then
+                anim.Gradient.Rotation = (anim.Gradient.Rotation + (anim.Speed * deltaTime)) % 360
+            elseif anim.Mode == "shift" then
+                local currentX = anim.Gradient.Offset.X
+                local newX = currentX + (anim.Speed * deltaTime)
+                if newX > 1 then newX = -1 end
+                anim.Gradient.Offset = Vector2.new(newX, anim.Gradient.Offset.Y)
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- FLOATING TOGGLE BUTTON WITH VECTOR CHEVRON ICON
+-- ═══════════════════════════════════════════════════════════════════════
+local ToggleFrame = Instance.new("Frame", UI)
+ToggleFrame.Name = "ToggleFrame"
+ToggleFrame.Size = UDim2.new(0, 36, 0, 36)
+-- Keep the only toggle directly below the Roblox menu.
+ToggleFrame.Position = UDim2.new(0, 8, 0, 48)
+ToggleFrame.BackgroundColor3 = Color3.fromRGB(16,16,16)
+ToggleFrame.BackgroundTransparency = 0.08
+ToggleFrame.BorderSizePixel = 0
+ToggleFrame.Active = true
+
+local ToggleCorner = Instance.new("UICorner", ToggleFrame)
+ToggleCorner.CornerRadius = UDim.new(0, 10)
+
+local ToggleGrad = Instance.new("UIGradient", ToggleFrame)
+ToggleGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(28,28,28)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(91,91,91)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(11,11,11))
+})
+ToggleGrad.Rotation = 45
+registerGradientAnimation(ToggleGrad, 40, "rotate")
+
+local ToggleStroke = Instance.new("UIStroke", ToggleFrame)
+ToggleStroke.Thickness = 1.2
+ToggleStroke.Color = Color3.fromRGB(154,154,154)
+ToggleStroke.Transparency = 0.18
+
+local ToggleIcon = Instance.new("ImageLabel", ToggleFrame)
+ToggleIcon.Size = UDim2.new(0, 20, 0, 20)
+ToggleIcon.Position = UDim2.new(0.5, -10, 0.5, -10)
+ToggleIcon.BackgroundTransparency = 1
+ToggleIcon.Image = ICONS.CHEVRON_RIGHT
+ToggleIcon.ImageColor3 = Color3.fromRGB(239,239,239)
+
+local ToggleBtn = Instance.new("TextButton", ToggleFrame)
+ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
+ToggleBtn.BackgroundTransparency = 1
+ToggleBtn.Text = ""
+
+-- Dragging System Toggle Button
+local tDragToggle, tDragStart, tStartPos
+ToggleFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        tDragToggle = true; tDragStart = input.Position; tStartPos = ToggleFrame.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if tDragToggle and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - tDragStart
+        ToggleFrame.Position = UDim2.new(tStartPos.X.Scale, tStartPos.X.Offset + delta.X, tStartPos.Y.Scale, tStartPos.Y.Offset + delta.Y)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        tDragToggle = false
+    end
+end)
+
+-- MAIN CONTAINER
+local Main = Instance.new("Frame", UI)
+Main.Name = "MainFrame"
+Main.Size = UDim2.new(0, 780, 0, 500)
+Main.Position = UDim2.new(0.5, -390, 0.5, -250)
+Main.BackgroundColor3 = Color3.fromRGB(25,25,25)
+Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
+Main.Visible = true
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 16)
+local MainStroke = Instance.new("UIStroke", Main)
+MainStroke.Thickness = 1.5
+MainStroke.Color = Color3.fromRGB(57,57,57)
+
+local UIScale = Instance.new("UIScale", Main)
+local function fitUI()
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    local v = cam.ViewportSize
+    UIScale.Scale = math.clamp(math.min(v.X / 820, v.Y / 540), 0.55, 1)
+end
+fitUI()
+if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fitUI) end
+
+-- HEADER
+local Header = Instance.new("Frame", Main)
+Header.Size = UDim2.new(1, 0, 0, 62)
+Header.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Header.BorderSizePixel = 0
+local HeaderStroke = Instance.new("UIStroke", Header)
+HeaderStroke.Color = Color3.fromRGB(45,45,45)
+
+local Brand = Instance.new("TextLabel", Header)
+Brand.Size = UDim2.new(0, 220, 0, 28)
+Brand.Position = UDim2.new(0, 22, 0, 12)
+Brand.BackgroundTransparency = 1
+Brand.Text = "NANG"
+Brand.TextColor3 = Color3.fromRGB(226,226,226)
+Brand.Font = Enum.Font.GothamBold
+Brand.TextSize = 20
+Brand.TextXAlignment = Enum.TextXAlignment.Left
+local Brand2 = Instance.new("TextLabel", Header)
+Brand2.Size = UDim2.new(0, 180, 0, 28)
+Brand2.Position = UDim2.new(0, 74, 0, 12)
+Brand2.BackgroundTransparency = 1
+Brand2.Text = "RBXM"
+Brand2.TextColor3 = Color3.fromRGB(135,135,135)
+Brand2.Font = Enum.Font.GothamBold
+Brand2.TextSize = 20
+Brand2.TextXAlignment = Enum.TextXAlignment.Left
+local Version = Instance.new("TextLabel", Header)
+Version.Size = UDim2.new(0, 50, 0, 20)
+Version.Position = UDim2.new(0, 132, 0, 16)
+Version.BackgroundColor3 = Color3.fromRGB(45,45,45)
+Version.Text = "v63.0"
+Version.TextColor3 = Color3.fromRGB(190,190,190)
+Version.Font = Enum.Font.Gotham
+Version.TextSize = 8
+Instance.new("UICorner", Version).CornerRadius = UDim.new(0,5)
+
+-- CREATOR / PURCHASE INFO — always visible at the top of the UI.
+local CreatorInfo = Instance.new("TextLabel", Header)
+CreatorInfo.Size = UDim2.new(0, 275, 0, 48)
+CreatorInfo.Position = UDim2.new(0, 205, 0, 7)
+CreatorInfo.BackgroundColor3 = Color3.fromRGB(35,35,35)
+CreatorInfo.BackgroundTransparency = 0
+CreatorInfo.Text = "MADE BY: NANG   |   ROBLOX ID: 8236629801\nBUY SCRIPT: 081252425581"
+CreatorInfo.TextColor3 = Color3.fromRGB(211,211,211)
+CreatorInfo.Font = Enum.Font.GothamBold
+CreatorInfo.TextSize = 10
+CreatorInfo.TextXAlignment = Enum.TextXAlignment.Center
+CreatorInfo.TextYAlignment = Enum.TextYAlignment.Center
+CreatorInfo.ZIndex = 20
+Instance.new("UICorner", CreatorInfo).CornerRadius = UDim.new(0, 8)
+local CreatorStroke = Instance.new("UIStroke", CreatorInfo)
+CreatorStroke.Color = Color3.fromRGB(93,93,93)
+CreatorStroke.Thickness = 1
+
+local TitleIcon = Instance.new("ImageLabel", Header)
+TitleIcon.Size = UDim2.new(0, 24, 0, 24)
+TitleIcon.Position = UDim2.new(0, 490, 0, 19)
+TitleIcon.BackgroundTransparency = 1
+TitleIcon.Image = ICONS.PACKAGE
+TitleIcon.ImageColor3 = Color3.fromRGB(127,127,127)
+local TitleText = Instance.new("TextLabel", Header)
+TitleText.Size = UDim2.new(0, 180, 0, 24)
+TitleText.Position = UDim2.new(0, 520, 0, 8)
+TitleText.BackgroundTransparency = 1
+TitleText.Text = "TOOLBOX"
+TitleText.TextColor3 = Color3.fromRGB(245,245,245)
+TitleText.Font = Enum.Font.GothamBold
+TitleText.TextSize = 16
+TitleText.TextXAlignment = Enum.TextXAlignment.Left
+local Subtitle = Instance.new("TextLabel", Header)
+Subtitle.Size = UDim2.new(0, 180, 0, 16)
+Subtitle.Position = UDim2.new(0, 520, 0, 32)
+Subtitle.BackgroundTransparency = 1
+Subtitle.Text = "Cari & import asset dari Roblox Creator Store"
+Subtitle.TextColor3 = Color3.fromRGB(130,130,130)
+Subtitle.Font = Enum.Font.Gotham
+Subtitle.TextSize = 9
+Subtitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseBtn = Instance.new("TextButton", Header)
+CloseBtn.Size = UDim2.new(0, 44, 0, 40)
+CloseBtn.Position = UDim2.new(1, -54, 0, 15)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(53,53,53)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(225,225,225)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 16
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
+local CloseClick = CloseBtn
+local MinBtn = Instance.new("TextButton", Header)
+MinBtn.Size = UDim2.new(0, 44, 0, 40)
+MinBtn.Position = UDim2.new(1, -104, 0, 15)
+MinBtn.BackgroundColor3 = Color3.fromRGB(44,44,44)
+MinBtn.Text = "—"
+MinBtn.TextColor3 = Color3.fromRGB(230,230,230)
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 18
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 8)
+local MinClick = MinBtn
+
+-- DRAG HEADER
+local dragToggle, dragStart, startPos
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragToggle = true; dragStart = input.Position; startPos = Main.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragToggle and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragToggle = false end
+end)
+
+local function toggleMain()
+    Main.Visible = not Main.Visible
+    ToggleIcon.Image = Main.Visible and ICONS.CHEVRON_RIGHT or ICONS.CHEVRON_LEFT
+end
+ToggleBtn.MouseButton1Click:Connect(toggleMain)
+
+-- SIDEBAR
+local Sidebar = Instance.new("Frame", Main)
+Sidebar.Size = UDim2.new(0, 150, 1, -62)
+Sidebar.Position = UDim2.new(0, 0, 0, 62)
+Sidebar.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Sidebar.BorderSizePixel = 0
+local SideTitle = Instance.new("TextLabel", Sidebar)
+SideTitle.Size = UDim2.new(1, -24, 0, 70)
+SideTitle.Position = UDim2.new(0, 12, 0, 8)
+SideTitle.BackgroundTransparency = 1
+local function getWhitelistGreeting()
+    local playerName = tostring(LocalPlayer.DisplayName or LocalPlayer.Name or "Nang")
+
+    -- Nama custom opsional berdasarkan UserId whitelist.
+    -- Jika ID belum diberi nama custom, script otomatis memakai DisplayName Roblox.
+    local WHITELIST_NAMES = {
+        -- [8236629801] = "Nang",
+        -- [10370966620] = "Nama Teman",
+        -- [8153244285] = "Nama Lain",
+        -- [9218615280] = "Nama Lain",
+    }
+
+    local customName = WHITELIST_NAMES[LocalPlayer.UserId]
+    if customName and customName ~= "" then
+        playerName = customName
+    end
+
+    -- Pastikan ID yang tampil memang berasal dari user yang lolos whitelist.
+    return "Hello,\n" .. playerName .. " 👑"
+end
+
+SideTitle.Text = getWhitelistGreeting()
+SideTitle.TextColor3 = Color3.fromRGB(216,216,216)
+SideTitle.Font = Enum.Font.GothamBold
+SideTitle.TextSize = 12
+SideTitle.TextXAlignment = Enum.TextXAlignment.Center
+SideTitle.TextYAlignment = Enum.TextYAlignment.Center
+
+local sideItems = {"⌂  DASHBOARD", "▣  TOOLBOX • FREE", "↓  IMPORT • FULL", "▤  RBXM • FULL", "▣  RBXMX • FULL", "▶  EXECUTE • FULL", "⚙  SETTINGS", "ⓘ  CREDITS"}
+local sideButtons = {}
+for i, text in ipairs(sideItems) do
+    local b = Instance.new("TextButton", Sidebar)
+    b.Size = UDim2.new(1, -16, 0, 36)
+    b.Position = UDim2.new(0, 8, 0, 82 + (i-1)*39)
+    b.BackgroundColor3 = (i == 2) and Color3.fromRGB(47,47,47) or Color3.fromRGB(30,30,30)
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextColor3 = (i == 2) and Color3.fromRGB(162,162,162) or Color3.fromRGB(186,186,186)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 9
+    b.TextXAlignment = Enum.TextXAlignment.Left
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 7)
+    sideButtons[i] = b
+end
+-- SIDEBAR NAVIGATION: setiap menu benar-benar berpindah ke fitur yang terlihat.
+local ActivePage = "TOOLBOX"
+local function setSideActive(index)
+    for i, btn in ipairs(sideButtons) do
+        btn.BackgroundColor3 = (i == index) and Color3.fromRGB(47,47,47) or Color3.fromRGB(30,30,30)
+        btn.TextColor3 = (i == index) and Color3.fromRGB(162,162,162) or Color3.fromRGB(186,186,186)
+    end
+end
+
+local StatusCard = Instance.new("Frame", Sidebar)
+StatusCard.Size = UDim2.new(1, -24, 0, 80)
+StatusCard.Position = UDim2.new(0, 12, 1, -94)
+StatusCard.BackgroundColor3 = Color3.fromRGB(35,35,35)
+StatusCard.BorderSizePixel = 0
+Instance.new("UICorner", StatusCard).CornerRadius = UDim.new(0, 10)
+local Status = Instance.new("TextLabel", StatusCard)
+Status.Size = UDim2.new(1, -18, 1, -12)
+Status.Position = UDim2.new(0, 9, 0, 6)
+Status.BackgroundTransparency = 1
+Status.Text = "●  STATUS\n   WHITELIST ACCESS\n   ALL FEATURES READY"
+Status.TextColor3 = Color3.fromRGB(151,151,151)
+Status.Font = Enum.Font.GothamBold
+Status.TextSize = 9
+Status.TextXAlignment = Enum.TextXAlignment.Left
+
+-- MAIN CONTENT
+local Content = Instance.new("Frame", Main)
+Content.Size = UDim2.new(1, -340, 1, -72)
+Content.Position = UDim2.new(0, 160, 0, 70)
+Content.BackgroundTransparency = 1
+
+local SearchRow = Instance.new("Frame", Content)
+SearchRow.Size = UDim2.new(1, 0, 0, 48)
+SearchRow.BackgroundTransparency = 1
+
+local SearchModelBox = Instance.new("TextBox", SearchRow)
+SearchModelBox.Size = UDim2.new(1, -96, 0, 40)
+SearchModelBox.Position = UDim2.new(0, 0, 0, 4)
+SearchModelBox.BackgroundColor3 = Color3.fromRGB(36,36,36)
+SearchModelBox.BorderSizePixel = 0
+SearchModelBox.ClearTextOnFocus = false
+SearchModelBox.PlaceholderText = "🔎  Cari di Creator Store..."
+SearchModelBox.Text = ""
+SearchModelBox.TextColor3 = Color3.fromRGB(240,240,240)
+SearchModelBox.PlaceholderColor3 = Color3.fromRGB(120,120,120)
+SearchModelBox.Font = Enum.Font.Gotham
+SearchModelBox.TextSize = 11
+Instance.new("UICorner", SearchModelBox).CornerRadius = UDim.new(0, 8)
+local SearchModelBtn = Instance.new("TextButton", SearchRow)
+SearchModelBtn.Size = UDim2.new(0, 86, 0, 40)
+SearchModelBtn.Position = UDim2.new(1, -86, 0, 4)
+SearchModelBtn.BackgroundColor3 = Color3.fromRGB(87,87,87)
+SearchModelBtn.BorderSizePixel = 0
+SearchModelBtn.Text = "SEARCH"
+SearchModelBtn.TextColor3 = Color3.new(1,1,1)
+SearchModelBtn.Font = Enum.Font.GothamBold
+SearchModelBtn.TextSize = 10
+Instance.new("UICorner", SearchModelBtn).CornerRadius = UDim.new(0, 8)
+
+local TypeTabs = Instance.new("Frame", Content)
+TypeTabs.Size = UDim2.new(1, 0, 0, 42)
+TypeTabs.Position = UDim2.new(0, 0, 0, 52)
+TypeTabs.BackgroundTransparency = 1
+local SearchType = "MODEL"
+local typeButtons = {}
+for i, kind in ipairs({"MODEL", "DECAL", "AUDIO"}) do
+    local b = Instance.new("TextButton", TypeTabs)
+    b.Size = UDim2.new(0, 105, 0, 34)
+    b.Position = UDim2.new(0, (i-1)*112, 0, 3)
+    b.BackgroundColor3 = (i == 1) and Color3.fromRGB(127,127,127) or Color3.fromRGB(28,28,28)
+    b.Text = kind
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 9
+    b.BorderSizePixel = 0
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 7)
+    typeButtons[kind] = b
+    b.MouseButton1Click:Connect(function()
+        SearchType = kind
+        for k, btn in pairs(typeButtons) do
+            btn.BackgroundColor3 = (k == SearchType) and Color3.fromRGB(127,127,127) or Color3.fromRGB(28,28,28)
+        end
+    end)
+end
+
+local SearchHead = Instance.new("TextLabel", Content)
+SearchHead.Size = UDim2.new(1, 0, 0, 28)
+SearchHead.Position = UDim2.new(0, 0, 0, 98)
+SearchHead.BackgroundColor3 = Color3.fromRGB(36,36,36)
+SearchHead.Text = "  ⚙  HASIL PENCARIAN"
+SearchHead.TextColor3 = Color3.fromRGB(235,235,235)
+SearchHead.Font = Enum.Font.GothamBold
+SearchHead.TextSize = 10
+SearchHead.TextXAlignment = Enum.TextXAlignment.Left
+Instance.new("UICorner", SearchHead).CornerRadius = UDim.new(0, 7)
+
+SearchScroll = Instance.new("ScrollingFrame", Content)
+SearchScroll.Size = UDim2.new(1, 0, 1, -132)
+SearchScroll.Position = UDim2.new(0, 0, 0, 132)
+SearchScroll.BackgroundTransparency = 1
+SearchScroll.BorderSizePixel = 0
+SearchScroll.ScrollBarThickness = 4
+SearchScroll.ScrollBarImageColor3 = Color3.fromRGB(87,87,87)
+SearchScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local SearchGrid = Instance.new("UIGridLayout", SearchScroll)
+SearchGrid.CellSize = UDim2.new(0, 150, 0, 178)
+SearchGrid.CellPadding = UDim2.new(0, 10, 0, 10)
+SearchGrid.SortOrder = Enum.SortOrder.LayoutOrder
+
+SearchEmptyFrame = Instance.new("Frame", SearchScroll)
+SearchEmptyFrame.Size = UDim2.new(0, 470, 0, 180)
+SearchEmptyFrame.BackgroundTransparency = 1
+local SearchEmptyLabel = Instance.new("TextLabel", SearchEmptyFrame)
+SearchEmptyLabel.Size = UDim2.new(1, 0, 1, 0)
+SearchEmptyLabel.BackgroundTransparency = 1
+SearchEmptyLabel.Text = "Cari asset dari Creator Store\nHasil akan muncul di sini."
+SearchEmptyLabel.TextColor3 = Color3.fromRGB(110,110,110)
+SearchEmptyLabel.Font = Enum.Font.Gotham
+SearchEmptyLabel.TextSize = 11
+SearchEmptyLabel.TextWrapped = true
+
+-- RIGHT QUICK IMPORT
+local Right = Instance.new("Frame", Main)
+Right.Size = UDim2.new(0, 170, 1, -72)
+Right.Position = UDim2.new(1, -180, 0, 70)
+Right.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Right.BorderSizePixel = 0
+Instance.new("UICorner", Right).CornerRadius = UDim.new(0, 12)
+local QuickTitle = Instance.new("TextLabel", Right)
+QuickTitle.Size = UDim2.new(1, -20, 0, 28)
+QuickTitle.Position = UDim2.new(0, 10, 0, 12)
+QuickTitle.BackgroundTransparency = 1
+QuickTitle.Text = "⚡ QUICK IMPORT"
+QuickTitle.TextColor3 = Color3.fromRGB(143,143,143)
+QuickTitle.Font = Enum.Font.GothamBold
+QuickTitle.TextSize = 12
+QuickTitle.TextXAlignment = Enum.TextXAlignment.Left
+local QuickHint = Instance.new("TextLabel", Right)
+QuickHint.Size = UDim2.new(1, -20, 0, 42)
+QuickHint.Position = UDim2.new(0, 10, 0, 42)
+QuickHint.BackgroundTransparency = 1
+QuickHint.Text = "Masukkan Asset ID atau URL langsung untuk import cepat."
+QuickHint.TextColor3 = Color3.fromRGB(150,150,150)
+QuickHint.Font = Enum.Font.Gotham
+QuickHint.TextSize = 8
+QuickHint.TextWrapped = true
+QuickHint.TextXAlignment = Enum.TextXAlignment.Left
+
+local ToolboxBox = Instance.new("TextBox", Right)
+ToolboxBox.Size = UDim2.new(1, -20, 0, 36)
+ToolboxBox.Position = UDim2.new(0, 10, 0, 88)
+ToolboxBox.BackgroundColor3 = Color3.fromRGB(27,27,27)
+ToolboxBox.BorderSizePixel = 0
+ToolboxBox.ClearTextOnFocus = false
+ToolboxBox.PlaceholderText = "Asset ID / URL..."
+ToolboxBox.Text = ""
+ToolboxBox.TextColor3 = Color3.fromRGB(240,240,240)
+ToolboxBox.PlaceholderColor3 = Color3.fromRGB(105,105,105)
+ToolboxBox.Font = Enum.Font.Gotham
+ToolboxBox.TextSize = 9
+Instance.new("UICorner", ToolboxBox).CornerRadius = UDim.new(0, 7)
+
+local ToolboxInsert = Instance.new("TextButton", Right)
+ToolboxInsert.Size = UDim2.new(1, -20, 0, 38)
+ToolboxInsert.Position = UDim2.new(0, 10, 0, 132)
+ToolboxInsert.BackgroundColor3 = Color3.fromRGB(87,87,87)
+ToolboxInsert.BorderSizePixel = 0
+ToolboxInsert.Text = "IMPORT SEKARANG"
+ToolboxInsert.TextColor3 = Color3.new(1,1,1)
+ToolboxInsert.Font = Enum.Font.GothamBold
+ToolboxInsert.TextSize = 9
+Instance.new("UICorner", ToolboxInsert).CornerRadius = UDim.new(0, 7)
+
+local FilePathBox = Instance.new("TextBox", Right)
+FilePathBox.Size = UDim2.new(1, -20, 0, 34)
+FilePathBox.Position = UDim2.new(0, 10, 0, 176)
+FilePathBox.BackgroundColor3 = Color3.fromRGB(27,27,27)
+FilePathBox.BorderSizePixel = 0
+FilePathBox.ClearTextOnFocus = false
+FilePathBox.PlaceholderText = "Path RBXM / RBXMX..."
+FilePathBox.Text = ""
+FilePathBox.TextColor3 = Color3.fromRGB(240,240,240)
+FilePathBox.PlaceholderColor3 = Color3.fromRGB(105,105,105)
+FilePathBox.Font = Enum.Font.Gotham
+FilePathBox.TextSize = 8
+Instance.new("UICorner", FilePathBox).CornerRadius = UDim.new(0, 7)
+
+local FileLoadBtn = Instance.new("TextButton", Right)
+FileLoadBtn.Size = UDim2.new(1, -20, 0, 32)
+FileLoadBtn.Position = UDim2.new(0, 10, 0, 216)
+FileLoadBtn.BackgroundColor3 = Color3.fromRGB(46,46,46)
+FileLoadBtn.BorderSizePixel = 0
+FileLoadBtn.Text = "LOAD RBXM / RBXMX"
+FileLoadBtn.TextColor3 = Color3.fromRGB(235,235,235)
+FileLoadBtn.Font = Enum.Font.GothamBold
+FileLoadBtn.TextSize = 8
+Instance.new("UICorner", FileLoadBtn).CornerRadius = UDim.new(0, 7)
+
+local Divider = Instance.new("TextLabel", Right)
+Divider.Size = UDim2.new(1, -20, 0, 20)
+Divider.Position = UDim2.new(0, 10, 0, 256)
+Divider.BackgroundTransparency = 1
+Divider.Text = "────────  atau  ────────"
+Divider.TextColor3 = Color3.fromRGB(80,80,80)
+Divider.Font = Enum.Font.Gotham
+Divider.TextSize = 7
+
+local Drop = Instance.new("TextLabel", Right)
+Drop.Size = UDim2.new(1, -20, 0, 95)
+Drop.Position = UDim2.new(0, 10, 0, 282)
+Drop.BackgroundColor3 = Color3.fromRGB(36,36,36)
+Drop.Text = "📁\nDrag & Drop File\nRBXM / RBXMX di sini"
+Drop.TextColor3 = Color3.fromRGB(220,220,220)
+Drop.Font = Enum.Font.GothamBold
+Drop.TextSize = 9
+Drop.TextWrapped = true
+Instance.new("UICorner", Drop).CornerRadius = UDim.new(0, 8)
+local DropStroke = Instance.new("UIStroke", Drop)
+DropStroke.Color = Color3.fromRGB(70,70,70)
+DropStroke.Thickness = 1
+
+local Format = Instance.new("TextLabel", Right)
+Format.Size = UDim2.new(1, -20, 0, 100)
+Format.Position = UDim2.new(0, 10, 0, 388)
+Format.BackgroundColor3 = Color3.fromRGB(36,36,36)
+Format.Text = "FORMAT DIDUKUNG\n\n✓ RBXM\n✓ RBXMX (PAID)\n✓ Model .rbxl\n✓ Audio .mp3 / .ogg"
+Format.TextColor3 = Color3.fromRGB(165,165,165)
+Format.Font = Enum.Font.Gotham
+Format.TextSize = 8
+Format.TextXAlignment = Enum.TextXAlignment.Left
+Instance.new("UICorner", Format).CornerRadius = UDim.new(0, 8)
+
+-- PAGE WIRING
+-- Forward declarations so navigation can safely reference objects/functions
+-- that are constructed a few lines later.
+local PagePanel
+local ScanBtn
+local showDashboardPanel, showImportPanel, showExecutePanel, showSettingsPanel, showCreditsPanel
+local function showPage(page)
+    ActivePage = page
+    local indexMap = {DASHBOARD=1, TOOLBOX=2, IMPORT=3, RBXM=4, RBXMX=5, EXECUTE=6, SETTINGS=7, CREDITS=8}
+    setSideActive(indexMap[page] or 2)
+
+    -- Default: toolbox/search visible.
+    Content.Visible = true
+    Right.Visible = (page == "TOOLBOX" or page == "DASHBOARD" or page == "IMPORT" or page == "RBXM" or page == "RBXMX")
+    if PagePanel then
+        PagePanel.Visible = (page == "DASHBOARD" or page == "IMPORT" or page == "EXECUTE" or page == "SETTINGS" or page == "CREDITS")
+    end
+    if ScanBtn then
+        ScanBtn.Visible = (page == "RBXM" or page == "RBXMX")
+    end
+
+    if page == "TOOLBOX" then
+        TitleText.Text = "TOOLBOX"
+        Subtitle.Text = "Cari & import asset dari Roblox Creator Store"
+        SearchRow.Visible = true; TypeTabs.Visible = true; SearchHead.Visible = true; SearchScroll.Visible = true
+        Right.Visible = true
+        if PagePanel then PagePanel.Visible = false end
+    elseif page == "DASHBOARD" then
+        TitleText.Text = "DASHBOARD"
+        Subtitle.Text = "Pusat kontrol NANG RBXM — semua menu punya fungsi sendiri"
+        SearchRow.Visible = false; TypeTabs.Visible = false; SearchHead.Visible = false; SearchScroll.Visible = false
+        Right.Visible = false
+        if PagePanel then showDashboardPanel() end
+    elseif page == "IMPORT" then
+        TitleText.Text = "IMPORT"
+        Subtitle.Text = "FULL ACCESS • Import asset ID / URL atau file RBXM / RBXMX"
+        SearchRow.Visible = false; TypeTabs.Visible = false; SearchHead.Visible = false; SearchScroll.Visible = false
+        Right.Visible = false
+        if PagePanel then showImportPanel() end
+    elseif page == "RBXM" or page == "RBXMX" then
+        TitleText.Text = page
+        Subtitle.Text = "FULL ACCESS • Scan file dan tekan INSERT pada file yang ditemukan"
+        SearchRow.Visible = false; TypeTabs.Visible = false; SearchHead.Visible = true; SearchScroll.Visible = true
+        SearchHead.Text = "  FILE IMPORT  •  " .. page
+        Right.Visible = true
+        if page == "RBXMX" then
+            Format.Text = "FORMAT DIDUKUNG\n\n✓ RBXMX\n✓ RBXM\n\nTekan SCAN FILES untuk menampilkan file."
+        else
+            Format.Text = "FORMAT DIDUKUNG\n\n✓ RBXM\n✓ RBXMX\n\nTekan SCAN FILES untuk menampilkan file."
+        end
+    elseif page == "EXECUTE" then
+        TitleText.Text = "EXECUTE"
+        Subtitle.Text = "FULL ACCESS • Tulis Lua sendiri lalu jalankan jika environment menyediakan loadstring"
+        SearchRow.Visible = false; TypeTabs.Visible = false; SearchHead.Visible = false; SearchScroll.Visible = false
+        Right.Visible = false
+        if PagePanel then showExecutePanel() end
+    elseif page == "SETTINGS" then
+        TitleText.Text = "SETTINGS"
+        Subtitle.Text = "Pengaturan yang benar-benar mengubah perilaku UI"
+        SearchRow.Visible = false; TypeTabs.Visible = false; SearchHead.Visible = false; SearchScroll.Visible = false
+        Right.Visible = false
+        if PagePanel then showSettingsPanel() end
+    elseif page == "CREDITS" then
+        TitleText.Text = "CREDITS"
+        Subtitle.Text = "Informasi fitur NANG RBXM"
+        SearchRow.Visible = false; TypeTabs.Visible = false; SearchHead.Visible = false; SearchScroll.Visible = false
+        Right.Visible = false
+        if PagePanel then showCreditsPanel() end
+    end
+end
+
+for i, btn in ipairs(sideButtons) do
+    btn.MouseButton1Click:Connect(function()
+        local pages = {"DASHBOARD","TOOLBOX","IMPORT","RBXM","RBXMX","EXECUTE","SETTINGS","CREDITS"}
+        showPage(pages[i])
+    end)
+end
+
+-- Legacy scan button retained but moved into sidebar/import behavior
+ScanBtn = Instance.new("TextButton", Sidebar)
+ScanBtn.Size = UDim2.new(1, -20, 0, 30)
+ScanBtn.Position = UDim2.new(0, 10, 1, -128)
+ScanBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
+ScanBtn.Text = "↻  SCAN FILES"
+ScanBtn.TextColor3 = Color3.fromRGB(210,210,210)
+ScanBtn.Font = Enum.Font.GothamBold
+ScanBtn.TextSize = 8
+Instance.new("UICorner", ScanBtn).CornerRadius = UDim.new(0, 6)
+local ScanClick = ScanBtn
+local ScanIcon = Instance.new("ImageLabel", ScanBtn)
+ScanIcon.Visible = false
+local ScanText = ScanBtn
+
+-- Legacy Scroll kept for RBXM/RBXL scanner cards; hidden until scan.
+Scroll = Instance.new("ScrollingFrame", UI)
+Scroll.Visible = false
+Scroll.Size = UDim2.new(0, 1, 0, 1)
+Scroll.Position = UDim2.new(0,0,0,0)
+Scroll.BackgroundTransparency = 1
+Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local LegacyLayout = Instance.new("UIListLayout", Scroll)
+LegacyLayout.Padding = UDim.new(0,5)
+EmptyFrame = Instance.new("Frame", Scroll)
+EmptyFrame.Size = UDim2.new(1,0,0,1)
+EmptyFrame.BackgroundTransparency = 1
+local EmptyLabel = Instance.new("TextLabel", EmptyFrame)
+EmptyLabel.Size = UDim2.new(1,0,1,0)
+EmptyLabel.BackgroundTransparency = 1
+EmptyLabel.Text = ""
+
+local StatsBar = Instance.new("Frame", Main)
+StatsBar.Size = UDim2.new(1, -390, 0, 22)
+StatsBar.Position = UDim2.new(0, 190, 1, -28)
+StatsBar.BackgroundColor3 = Color3.fromRGB(22,22,22)
+StatsBar.BorderSizePixel = 0
+Instance.new("UICorner", StatsBar).CornerRadius = UDim.new(0, 6)
+local StatsText = Instance.new("TextLabel", StatsBar)
+StatsText.Size = UDim2.new(1,-12,1,0)
+StatsText.Position = UDim2.new(0,6,0,0)
+StatsText.BackgroundTransparency = 1
+StatsText.Text = "Status: Ready  |  Files: 0"
+StatsText.TextColor3 = Color3.fromRGB(140,140,140)
+StatsText.Font = Enum.Font.Gotham
+StatsText.TextSize = 8
+StatsText.TextXAlignment = Enum.TextXAlignment.Left
+
+-- NOTIFICATION SYSTEM WITH VECTOR BELL ICON
+notify = function(title, msg, color)
+    color = color or Color3.fromRGB(207,207,207)
+    local notif = Instance.new("Frame", UI)
+    notif.Size = UDim2.new(0, 220, 0, 42)
+    notif.Position = UDim2.new(1, -230, 1, -55)
+    notif.BackgroundColor3 = Color3.fromRGB(18,18,18)
+    notif.BorderSizePixel = 0
+    Instance.new("UICorner", notif).CornerRadius = UDim.new(0, 6)
+
+    local notifStroke = Instance.new("UIStroke", notif)
+    notifStroke.Thickness = 1
+    notifStroke.Color = color
+
+    local icon = Instance.new("ImageLabel", notif)
+    icon.Size = UDim2.new(0, 14, 0, 14)
+    icon.Position = UDim2.new(0, 8, 0, 6)
+    icon.BackgroundTransparency = 1
+    icon.Image = ICONS.BELL
+    icon.ImageColor3 = color
+
+    local t = Instance.new("TextLabel", notif)
+    t.Size = UDim2.new(1, -28, 0, 14); t.Position = UDim2.new(0, 26, 0, 4)
+    t.BackgroundTransparency = 1; t.Text = title
+    t.TextColor3 = Color3.fromRGB(239,239,239); t.Font = Enum.Font.GothamBold
+    t.TextSize = 10; t.TextXAlignment = Enum.TextXAlignment.Left
+
+    local d = Instance.new("TextLabel", notif)
+    d.Size = UDim2.new(1, -12, 0, 16); d.Position = UDim2.new(0, 8, 0, 18)
+    d.BackgroundTransparency = 1; d.Text = msg
+    d.TextColor3 = Color3.fromRGB(149,149,149); d.Font = Enum.Font.Gotham
+    d.TextSize = 8; d.TextXAlignment = Enum.TextXAlignment.Left
+    d.TextWrapped = true
+
+    task.spawn(function()
+        task.wait(2.5)
+        for i = 1, 12 do
+            notif.BackgroundTransparency = i / 12
+            icon.ImageTransparency = i / 12
+            t.TextTransparency = i / 12
+            d.TextTransparency = i / 12
+            task.wait(0.02)
+        end
+        notif:Destroy()
+    end)
+end
+
+-- ======================================================================
+-- REAL PAGE PANELS
+-- Sidebar menus are functional: each page gets its own controls.
+-- ======================================================================
+PagePanel = Instance.new("Frame", Content)
+PagePanel.Name = "PagePanel"
+PagePanel.Size = UDim2.new(1, 0, 1, 0)
+PagePanel.Position = UDim2.new(0, 0, 0, 0)
+PagePanel.BackgroundTransparency = 1
+PagePanel.Visible = false
+PagePanel.ZIndex = 20
+
+local pageViews = {}
+local function clearPageView()
+    for _, child in ipairs(PagePanel:GetChildren()) do
+        child:Destroy()
+    end
+end
+local function panelLabel(text, pos, size, fontSize, color)
+    local l = Instance.new("TextLabel", PagePanel)
+    l.BackgroundTransparency = 1
+    l.Position = pos
+    l.Size = size
+    l.Text = text
+    l.TextColor3 = color or Color3.fromRGB(230,230,230)
+    l.Font = Enum.Font.Gotham
+    l.TextSize = fontSize or 10
+    l.TextWrapped = true
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextYAlignment = Enum.TextYAlignment.Top
+    return l
+end
+local function panelButton(text, pos, size, callback, accent)
+    local b = Instance.new("TextButton", PagePanel)
+    b.Position = pos; b.Size = size
+    b.BackgroundColor3 = accent or Color3.fromRGB(127,127,127)
+    b.BorderSizePixel = 0; b.Text = text
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold; b.TextSize = 9
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
+    b.MouseButton1Click:Connect(callback)
+    return b
+end
+local function panelBox(placeholder, pos, size)
+    local b = Instance.new("TextBox", PagePanel)
+    b.Position = pos; b.Size = size
+    b.BackgroundColor3 = Color3.fromRGB(24,24,24)
+    b.BorderSizePixel = 0; b.ClearTextOnFocus = false
+    b.PlaceholderText = placeholder; b.Text = ""
+    b.TextColor3 = Color3.fromRGB(240,240,240)
+    b.PlaceholderColor3 = Color3.fromRGB(110,110,110)
+    b.Font = Enum.Font.Code; b.TextSize = 9
+    b.TextXAlignment = Enum.TextXAlignment.Left
+    b.TextYAlignment = Enum.TextYAlignment.Top
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
+    return b
+end
+
+showDashboardPanel = function()
+    clearPageView(); PagePanel.Visible = true
+    panelLabel("NANG RBXM CONTROL CENTER", UDim2.new(0,10,0,10), UDim2.new(1,-20,0,30), 18, Color3.fromRGB(127,127,127))
+    panelLabel("Pilih menu di kiri. Sekarang setiap menu membuka fungsi yang berbeda, bukan halaman kosong.", UDim2.new(0,10,0,46), UDim2.new(1,-20,0,36), 9, Color3.fromRGB(145,145,145))
+    local cards = {
+        {"TOOLBOX", "Search Creator Store + INSERT", "TOOLBOX"},
+        {"IMPORT • FULL", "Asset ID / URL + file path", "IMPORT"},
+        {"RBXM • FULL", "Scan dan INSERT RBXM", "RBXM"},
+        {"RBXMX • FULL", "Scan dan INSERT RBXMX", "RBXMX"},
+        {"EXECUTE • FULL", "Lua executor panel", "EXECUTE"},
+        {"SETTINGS", "UI behavior", "SETTINGS"},
+    }
+    for i, c in ipairs(cards) do
+        local col = (i-1)%2; local row = math.floor((i-1)/2)
+        local x = col*245; local y = 92 + row*82
+        local f = Instance.new("Frame", PagePanel)
+        f.Position = UDim2.new(0,x,0,y); f.Size = UDim2.new(0,230,0,70)
+        f.BackgroundColor3 = Color3.fromRGB(23,23,23); f.BorderSizePixel = 0
+        Instance.new("UICorner", f).CornerRadius = UDim.new(0,10)
+        panelLabel(c[1], UDim2.new(0,x+12,0,y+10), UDim2.new(0,210,0,20), 11, Color3.fromRGB(118,118,118))
+        panelLabel(c[2], UDim2.new(0,x+12,0,y+32), UDim2.new(0,150,0,26), 8, Color3.fromRGB(150,150,150))
+        panelButton("OPEN", UDim2.new(0,x+172,0,y+20), UDim2.new(0,48,0,28), function() showPage(c[3]) end, Color3.fromRGB(32,32,32))
+    end
+end
+
+showImportPanel = function()
+    clearPageView(); PagePanel.Visible = true
+    panelLabel("QUICK IMPORT", UDim2.new(0,10,0,10), UDim2.new(1,-20,0,28), 18, Color3.fromRGB(127,127,127))
+    panelLabel("Gunakan Asset ID/URL untuk Toolbox atau path file untuk RBXM/RBXMX.", UDim2.new(0,10,0,42), UDim2.new(1,-20,0,30), 9, Color3.fromRGB(145,145,145))
+    local assetBox = panelBox("Asset ID / URL...", UDim2.new(0,10,0,82), UDim2.new(0,300,0,44))
+    panelButton("IMPORT ASSET", UDim2.new(0,320,0,82), UDim2.new(0,130,0,44), function()
+        local v = tostring(assetBox.Text or ""):gsub("%s+", "")
+        if v == "" then notify("Import", "Masukkan Asset ID atau URL.", Color3.fromRGB(189,189,189)); return end
+        task.spawn(function()
+            local ok,msg = insertToolboxModel(v)
+            notify(ok and "Import Berhasil" or "Import Gagal", tostring(msg), ok and Color3.fromRGB(185,185,185) or Color3.fromRGB(122,122,122))
+        end)
+    end)
+    local fileBox = panelBox("Path RBXM / RBXMX...", UDim2.new(0,10,0,150), UDim2.new(0,300,0,44))
+    panelButton("LOAD FILE", UDim2.new(0,320,0,150), UDim2.new(0,130,0,44), function()
+        local path = tostring(fileBox.Text or ""):gsub("^%s+",""):gsub("%s+$",""):gsub("\\", "/")
+        if path == "" then notify("Import", "Masukkan path file.", Color3.fromRGB(189,189,189)); return end
+        local low = path:lower()
+        local ft = (low:match("%.rbxmx$") or low:match("%.rbxm$")) and "RBXM" or nil
+        if not ft then notify("Import", "File harus .rbxm atau .rbxmx.", Color3.fromRGB(122,122,122)); return end
+        task.spawn(function()
+            local ok,msg = loadFile({name=path:match("([^/]+)$") or path,path=path,ftype=ft})
+            notify(ok and "File Loaded" or "File Gagal", tostring(msg), ok and Color3.fromRGB(185,185,185) or Color3.fromRGB(122,122,122))
+        end)
+    end, Color3.fromRGB(55,55,55))
+end
+
+local ExecuteEditor
+showExecutePanel = function()
+    clearPageView(); PagePanel.Visible = true
+    panelLabel("SCRIPT EXECUTE", UDim2.new(0,10,0,8), UDim2.new(1,-20,0,28), 18, Color3.fromRGB(127,127,127))
+    panelLabel("Masukkan Lua. Tombol akan memberi status jika loadstring tersedia atau tidak.", UDim2.new(0,10,0,38), UDim2.new(1,-20,0,26), 8, Color3.fromRGB(145,145,145))
+    ExecuteEditor = panelBox("-- tulis script Lua di sini...", UDim2.new(0,10,0,72), UDim2.new(1,-20,0,300))
+    ExecuteEditor.MultiLine = true
+    local execStatus = panelLabel("Status: READY", UDim2.new(0,10,0,382), UDim2.new(0,300,0,24), 9, Color3.fromRGB(190,190,190))
+    panelButton("EXECUTE SCRIPT", UDim2.new(0,320,0,378), UDim2.new(0,145,0,38), function()
+        local src = tostring(ExecuteEditor.Text or "")
+        if src:gsub("%s+", "") == "" then execStatus.Text = "Status: script kosong"; return end
+        if type(loadstring) ~= "function" then
+            execStatus.Text = "Status: loadstring tidak tersedia"
+            notify("Execute", "Environment tidak menyediakan loadstring.", Color3.fromRGB(122,122,122))
+            return
+        end
+        execStatus.Text = "Status: EXECUTING..."
+        task.spawn(function()
+            local fn, err = loadstring(src)
+            if not fn then execStatus.Text = "Status: COMPILE ERROR"; notify("Execute Error", tostring(err), Color3.fromRGB(122,122,122)); return end
+            local ok, result = pcall(fn)
+            if ok then
+                execStatus.Text = "Status: EXECUTED"
+                notify("Execute", "Script berhasil dijalankan.", Color3.fromRGB(185,185,185))
+            else
+                execStatus.Text = "Status: RUNTIME ERROR"
+                notify("Execute Error", tostring(result), Color3.fromRGB(122,122,122))
+            end
+        end)
+    end)
+end
+
+showSettingsPanel = function()
+    clearPageView(); PagePanel.Visible = true
+    panelLabel("SETTINGS", UDim2.new(0,10,0,10), UDim2.new(1,-20,0,28), 18, Color3.fromRGB(127,127,127))
+    panelLabel("Pengaturan di bawah ini langsung mengubah UI.", UDim2.new(0,10,0,42), UDim2.new(1,-20,0,24), 9, Color3.fromRGB(145,145,145))
+    local posLabel = panelLabel("Window position: current", UDim2.new(0,10,0,90), UDim2.new(0,260,0,30), 10, Color3.fromRGB(220,220,220))
+    panelButton("RESET POSITION", UDim2.new(0,290,0,84), UDim2.new(0,145,0,38), function()
+        Main.Position = UDim2.new(0.5,-460,0.5,-290)
+        posLabel.Text = "Window position: reset"
+    end, Color3.fromRGB(55,55,55))
+    panelButton("TOOLBOX", UDim2.new(0,10,0,145), UDim2.new(0,130,0,38), function() showPage("TOOLBOX") end)
+    panelButton("DASHBOARD", UDim2.new(0,150,0,145), UDim2.new(0,130,0,38), function() showPage("DASHBOARD") end)
+    panelLabel("UI Scale", UDim2.new(0,10,0,205), UDim2.new(0,100,0,24), 10, Color3.fromRGB(220,220,220))
+    panelButton("FIT SCREEN", UDim2.new(0,120,0,198), UDim2.new(0,130,0,38), function()
+        fitUI(); notify("Settings", "UI scale disesuaikan dengan layar.", Color3.fromRGB(185,185,185))
+    end, Color3.fromRGB(55,55,55))
+end
+
+showCreditsPanel = function()
+    clearPageView(); PagePanel.Visible = true
+    panelLabel("NANG RBXM", UDim2.new(0,10,0,12), UDim2.new(1,-20,0,32), 22, Color3.fromRGB(127,127,127))
+    panelLabel("RBXM / RBXMX Importer\nCreator Store Search\nToolbox Asset Insert\nStudio Lite integration\n\nMenu sidebar dibuat sebagai halaman fungsional, bukan tombol pajangan.", UDim2.new(0,10,0,58), UDim2.new(1,-20,0,150), 10, Color3.fromRGB(190,190,190))
+    panelButton("BACK TO DASHBOARD", UDim2.new(0,10,0,220), UDim2.new(0,170,0,40), function() showPage("DASHBOARD") end, Color3.fromRGB(32,32,32))
+end
+
+-- CARD BUILDER WITH VECTOR BADGES & DOWNLOAD ICON
+local totalLoaded = 0
+
+local function buildFileCard(fileInfo)
+    EmptyFrame.Visible = false
+
+    local card = Instance.new("Frame", Scroll)
+    card.Size = UDim2.new(1, 0, 0, 44)
+    card.BackgroundColor3 = Color3.fromRGB(24,24,24)
+    card.BorderSizePixel = 0
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 6)
+
+    local cardStroke = Instance.new("UIStroke", card)
+    cardStroke.Thickness = 1
+    cardStroke.Color = Color3.fromRGB(70,70,70)
+
+    local isRbxl = fileInfo.ftype == "RBXL"
+
+    local typeBadge = Instance.new("Frame", card)
+    typeBadge.Size = UDim2.new(0, 48, 0, 16); typeBadge.Position = UDim2.new(0, 6, 0, 6)
+    typeBadge.BackgroundColor3 = isRbxl and Color3.fromRGB(190,190,190) or Color3.fromRGB(92,92,92)
+    typeBadge.BorderSizePixel = 0
+    Instance.new("UICorner", typeBadge).CornerRadius = UDim.new(0, 4)
+
+    local badgeIcon = Instance.new("ImageLabel", typeBadge)
+    badgeIcon.Size = UDim2.new(0, 10, 0, 10)
+    badgeIcon.Position = UDim2.new(0, 4, 0.5, -5)
+    badgeIcon.BackgroundTransparency = 1
+    badgeIcon.Image = isRbxl and ICONS.GAMEPAD or ICONS.FILE
+    badgeIcon.ImageColor3 = Color3.fromRGB(23,23,23)
+
+    local typeText = Instance.new("TextLabel", typeBadge)
+    typeText.Size = UDim2.new(1, -16, 1, 0); typeText.Position = UDim2.new(0, 16, 0, 0)
+    typeText.BackgroundTransparency = 1
+    typeText.Text = fileInfo.ftype
+    typeText.TextColor3 = Color3.fromRGB(23,23,23)
+    typeText.Font = Enum.Font.GothamBold; typeText.TextSize = 8
+
+    local nameLbl = Instance.new("TextLabel", card)
+    nameLbl.Size = UDim2.new(1, -135, 0, 16); nameLbl.Position = UDim2.new(0, 60, 0, 6)
+    nameLbl.BackgroundTransparency = 1; nameLbl.Text = fileInfo.name
+    nameLbl.TextColor3 = Color3.fromRGB(234,234,234); nameLbl.Font = Enum.Font.GothamBold
+    nameLbl.TextSize = 10; nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local pathLbl = Instance.new("TextLabel", card)
+    pathLbl.Size = UDim2.new(1, -135, 0, 12); pathLbl.Position = UDim2.new(0, 60, 0, 22)
+    pathLbl.BackgroundTransparency = 1; pathLbl.Text = fileInfo.path
+    pathLbl.TextColor3 = Color3.fromRGB(152,152,152); pathLbl.Font = Enum.Font.Gotham
+    pathLbl.TextSize = 8; pathLbl.TextXAlignment = Enum.TextXAlignment.Left
+    pathLbl.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local insertFrame = Instance.new("Frame", card)
+    insertFrame.Size = UDim2.new(0, 66, 0, 24); insertFrame.Position = UDim2.new(1, -72, 0.5, -12)
+    insertFrame.BackgroundColor3 = Color3.fromRGB(47,47,47)
+    Instance.new("UICorner", insertFrame).CornerRadius = UDim.new(0, 4)
+
+    local btnStroke = Instance.new("UIStroke", insertFrame)
+    btnStroke.Thickness = 1
+    btnStroke.Color = Color3.fromRGB(175,175,175)
+
+    local insertIcon = Instance.new("ImageLabel", insertFrame)
+    insertIcon.Size = UDim2.new(0, 10, 0, 10)
+    insertIcon.Position = UDim2.new(0, 6, 0.5, -5)
+    insertIcon.BackgroundTransparency = 1
+    insertIcon.Image = ICONS.DOWNLOAD
+    insertIcon.ImageColor3 = Color3.fromRGB(236,236,236)
+
+    local insertText = Instance.new("TextLabel", insertFrame)
+    insertText.Size = UDim2.new(1, -18, 1, 0); insertText.Position = UDim2.new(0, 18, 0, 0)
+    insertText.BackgroundTransparency = 1; insertText.Text = "INSERT"
+    insertText.TextColor3 = Color3.fromRGB(236,236,236)
+    insertText.Font = Enum.Font.GothamBold; insertText.TextSize = 8
+
+    local insertBtn = Instance.new("TextButton", insertFrame)
+    insertBtn.Size = UDim2.new(1, 0, 1, 0)
+    insertBtn.BackgroundTransparency = 1
+    insertBtn.Text = ""
+
+    insertBtn.MouseEnter:Connect(function() TweenService:Create(insertFrame, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(81,81,81)}):Play() end)
+    insertBtn.MouseLeave:Connect(function() TweenService:Create(insertFrame, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(47,47,47)}):Play() end)
+
+    insertBtn.MouseButton1Click:Connect(function()
+        if insertText.Text == "LOADING" then return end
+        insertText.Text = "LOADING"; insertIcon.Image = ICONS.REFRESH
+        insertFrame.BackgroundColor3 = Color3.fromRGB(61,61,61)
+
+        task.spawn(function()
+            local ok, msg = loadFile(fileInfo)
+            if ok then
+                insertText.Text = "DONE"; insertIcon.Image = ICONS.CHECK
+                insertFrame.BackgroundColor3 = Color3.fromRGB(185,185,185)
+                totalLoaded = totalLoaded + 1
+                StatsText.Text = string.format("Status: Ready  |  Files: %d  |  Loaded: %d", #Scroll:GetChildren() - 1, totalLoaded)
+                notify("Success", fileInfo.name .. " dimuat!", Color3.fromRGB(207,207,207))
+            else
+                insertText.Text = "FAIL"; insertIcon.Image = ICONS.ALERT
+                insertFrame.BackgroundColor3 = Color3.fromRGB(67,67,67)
+                notify("Gagal", msg, Color3.fromRGB(110,110,110))
+            end
+            task.wait(2)
+            insertText.Text = "INSERT"; insertIcon.Image = ICONS.DOWNLOAD
+            insertFrame.BackgroundColor3 = Color3.fromRGB(47,47,47)
+        end)
+    end)
+end
+
+
+local function buildModernFileCard(fileInfo)
+    if not SearchScroll then return end
+    SearchEmptyFrame.Visible = false
+    local card = Instance.new("Frame", SearchScroll)
+    card.Size = UDim2.new(0, 150, 0, 178)
+    card.BackgroundColor3 = Color3.fromRGB(24,24,24)
+    card.BorderSizePixel = 0
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0,10)
+    local stroke = Instance.new("UIStroke", card)
+    stroke.Color = Color3.fromRGB(58,58,58)
+    stroke.Thickness = 1
+
+    local badge = Instance.new("TextLabel", card)
+    badge.Size = UDim2.new(1,-12,0,28)
+    badge.Position = UDim2.new(0,6,0,8)
+    badge.BackgroundColor3 = fileInfo.ftype == "RBXM" and Color3.fromRGB(127,127,127) or Color3.fromRGB(128,128,128)
+    badge.Text = fileInfo.ftype
+    badge.TextColor3 = Color3.new(1,1,1)
+    badge.Font = Enum.Font.GothamBold
+    badge.TextSize = 12
+    Instance.new("UICorner", badge).CornerRadius = UDim.new(0,7)
+
+    local name = Instance.new("TextLabel", card)
+    name.Size = UDim2.new(1,-12,0,38)
+    name.Position = UDim2.new(0,6,0,46)
+    name.BackgroundTransparency = 1
+    name.Text = tostring(fileInfo.name)
+    name.TextColor3 = Color3.fromRGB(240,240,240)
+    name.Font = Enum.Font.GothamBold
+    name.TextSize = 9
+    name.TextWrapped = true
+    name.TextXAlignment = Enum.TextXAlignment.Left
+    name.TextYAlignment = Enum.TextYAlignment.Top
+
+    local path = Instance.new("TextLabel", card)
+    path.Size = UDim2.new(1,-12,0,30)
+    path.Position = UDim2.new(0,6,0,86)
+    path.BackgroundTransparency = 1
+    path.Text = tostring(fileInfo.path)
+    path.TextColor3 = Color3.fromRGB(115,115,115)
+    path.Font = Enum.Font.Gotham
+    path.TextSize = 6
+    path.TextWrapped = true
+    path.TextXAlignment = Enum.TextXAlignment.Left
+    path.TextYAlignment = Enum.TextYAlignment.Top
+
+    local btn = Instance.new("TextButton", card)
+    btn.Size = UDim2.new(1,-12,0,30)
+    btn.Position = UDim2.new(0,6,1,-36)
+    btn.BackgroundColor3 = Color3.fromRGB(127,127,127)
+    btn.Text = "INSERT"
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 9
+    btn.BorderSizePixel = 0
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
+    btn.MouseButton1Click:Connect(function()
+        if btn.Text == "LOADING..." then return end
+        btn.Text = "LOADING..."
+        task.spawn(function()
+            local ok, msg = loadFile(fileInfo)
+            if ok then
+                btn.Text = "DONE"
+                btn.BackgroundColor3 = Color3.fromRGB(137,137,137)
+                notify("RBXM Import", tostring(fileInfo.name) .. " berhasil dimasukkan.", Color3.fromRGB(185,185,185))
+            else
+                btn.Text = "FAIL"
+                btn.BackgroundColor3 = Color3.fromRGB(78,78,78)
+                notify("RBXM Gagal", tostring(msg), Color3.fromRGB(122,122,122))
+            end
+            task.wait(1.3)
+            btn.Text = "INSERT"
+            btn.BackgroundColor3 = Color3.fromRGB(127,127,127)
+        end)
+    end)
+end
+
+local creatorPage = 0
+local creatorSearching = false
+
+local function runCreatorSearch()
+    if creatorSearching then return end
+    local keyword = SearchModelBox.Text
+    if tostring(keyword):gsub("%s+", "") == "" then
+        notify("Creator Store", "Ketik nama asset terlebih dahulu.", Color3.fromRGB(189,189,189))
+        return
+    end
+
+    creatorSearching = true
+    creatorPage = 0
+    SearchModelBtn.Text = "SEARCH..."
+    clearScrollCards()
+    SearchEmptyFrame.Visible = true
+    SearchEmptyFrame:FindFirstChildOfClass("TextLabel").Text = "Mencari " .. SearchType .. " di Creator Store..."
+
+    task.spawn(function()
+        local ok, results, err = searchCreatorModels(keyword, creatorPage, SearchType)
+        if ok then
+            SearchEmptyFrame.Visible = (#results == 0)
+            if #results == 0 then
+                SearchEmptyFrame:FindFirstChildOfClass("TextLabel").Text = SearchType .. " tidak ditemukan.\nCoba kata kunci lain."
+            else
+                for _, info in ipairs(results) do buildModelResultCard(info) end
+                StatsText.Text = string.format("Status: Creator Store  |  %d %s ditemukan", #results, SearchType)
+                notify("Creator Store", #results .. " " .. SearchType .. " ditemukan.", Color3.fromRGB(149,149,149))
+            end
+        else
+            SearchEmptyFrame.Visible = true
+            SearchEmptyFrame:FindFirstChildOfClass("TextLabel").Text = "Pencarian gagal.\n" .. tostring(err)
+            notify("Creator Store Gagal", tostring(err), Color3.fromRGB(122,122,122))
+        end
+        SearchModelBtn.Text = "SEARCH"
+        creatorSearching = false
+    end)
+end
+
+SearchModelBtn.MouseButton1Click:Connect(runCreatorSearch)
+SearchModelBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then runCreatorSearch() end
+end)
+
+ToolboxInsert.MouseButton1Click:Connect(function()
+    local value = tostring(ToolboxBox.Text or ""):gsub("%s+", "")
+    if value == "" then
+        notify("Quick Import", "Masukkan Asset ID atau URL.", Color3.fromRGB(189,189,189))
+        return
+    end
+    if ToolboxInsert.Text == "LOADING..." then return end
+    ToolboxInsert.Text = "LOADING..."
+    task.spawn(function()
+        local quickId = tostring(value):match("(%d+)") or "Asset"
+        local ok, msg = insertToolboxAsset(value, SearchType, "Music_" .. quickId)
+        if ok then
+            ToolboxInsert.Text = "DONE"
+            if tostring(SearchType):upper() == "AUDIO" then
+                notify("Music", "Audio berhasil ditambahkan ke SoundService: " .. tostring(msg), Color3.fromRGB(185,185,185))
+            else
+                notify("Toolbox", "Asset berhasil diinsert: " .. tostring(msg), Color3.fromRGB(185,185,185))
+            end
+        else
+            ToolboxInsert.Text = "FAIL"
+            notify("Toolbox Gagal", tostring(msg), Color3.fromRGB(122,122,122))
+        end
+        task.wait(1.3)
+        ToolboxInsert.Text = "IMPORT SEKARANG"
+    end)
+end)
+
+-- SCAN LOGIC
+ScanClick.MouseButton1Click:Connect(function()
+    ScanText.Text = "⟳  SCANNING..."
+    clearScrollCards()
+    SearchEmptyFrame.Visible = true
+    SearchEmptyFrame:FindFirstChildOfClass("TextLabel").Text = "Mencari file RBXM / RBXMX / RBXL..."
+    task.spawn(function()
+        local scanned = scanAll()
+        local foundFiles = {}
+        for _, f in ipairs(scanned) do
+            if ActivePage == "RBXMX" then
+                if f.path:lower():match("%.rbxmx$") then table.insert(foundFiles, f) end
+            elseif ActivePage == "RBXM" then
+                if f.path:lower():match("%.rbxm$") then table.insert(foundFiles, f) end
+            else
+                table.insert(foundFiles, f)
+            end
+        end
+        for _, f in ipairs(foundFiles) do buildModernFileCard(f) end
+        SearchEmptyFrame.Visible = (#foundFiles == 0)
+        StatsText.Text = string.format("Status: Ready  |  %d %s file(s)", #foundFiles, ActivePage)
+        ScanText.Text = "↻  SCAN FILES"
+        if #foundFiles == 0 then
+            notify("Scan", "Tidak ada file RBXM/RBXMX/RBXL yang ditemukan.", Color3.fromRGB(189,189,189))
+        else
+            notify("Scan Selesai", #foundFiles .. " file terdeteksi.", Color3.fromRGB(185,185,185))
+        end
+    end)
+end)
+
+FileLoadBtn.MouseButton1Click:Connect(function()
+    local path = tostring(FilePathBox.Text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if path == "" then
+        notify("RBXM", "Masukkan path file RBXM/RBXMX.", Color3.fromRGB(189,189,189))
+        return
+    end
+    local lower = path:lower()
+    local ftype = (lower:match("%.rbxmx$") or lower:match("%.rbxm$")) and "RBXM" or nil
+    if not ftype then
+        notify("RBXM", "File harus berformat .rbxm atau .rbxmx.", Color3.fromRGB(122,122,122))
+        return
+    end
+    FileLoadBtn.Text = "LOADING..."
+    task.spawn(function()
+        local ok, msg = loadFile({name = path:match("([^/]+)$") or path, path = path, ftype = ftype})
+        if ok then
+            FileLoadBtn.Text = "DONE"
+            notify("RBXM Import", tostring(msg), Color3.fromRGB(185,185,185))
+        else
+            FileLoadBtn.Text = "FAIL"
+            notify("RBXM Gagal", tostring(msg), Color3.fromRGB(122,122,122))
+        end
+        task.wait(1.3)
+        FileLoadBtn.Text = "LOAD RBXM / RBXMX"
+    end)
+end)
+
+-- MINIMIZE / CLOSE
+-- Close only hides the panel; the toggle below the Roblox menu stays available.
+CloseClick.MouseButton1Click:Connect(function()
+    if Main.Visible then
+        toggleMain()
+    end
+end)
+
+local minimized = false
+MinClick.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        Content.Visible = false
+        StatsBar.Visible = false
+        Main.Size = UDim2.new(0, 920, 0, 70)
+    else
+        Content.Visible = true
+        StatsBar.Visible = true
+        Main.Size = UDim2.new(0, 780, 0, 500)
+    end
+end)
+
+
+-- Initial visible page: Toolbox, so every important feature is immediately visible.
+showPage("TOOLBOX")
+
+-- FLY REMOVED: this build is intentionally focused on asset tools.
+
+
+end
+
+local __NANG_OK, __NANG_ERR = xpcall(__NANG_RUN_MAIN, function(err)
+    return debug and debug.traceback and debug.traceback(tostring(err), 2) or tostring(err)
+end)
+__NANG_MAIN_OK = __NANG_OK
+__NANG_MAIN_ERR = __NANG_ERR
+
+if not __NANG_OK then
+    warn("[NANG RBXM] Safe Execute caught an error:\n" .. tostring(__NANG_ERR))
+
+    -- Emergency UI: memastikan Execute tetap memberi feedback meski fitur
+    -- optional/environment-specific gagal diinisialisasi.
+    pcall(function()
+        local Players = game:GetService("Players")
+        local CoreGui = game:GetService("CoreGui")
+        local player = Players.LocalPlayer
+        local parent = CoreGui
+        pcall(function()
+            if not parent then parent = player:WaitForChild("PlayerGui") end
+        end)
+        if not parent then parent = player:WaitForChild("PlayerGui") end
+
+        local old = parent:FindFirstChild("NANG_SAFE_EXECUTE_STATUS")
+        if old then old:Destroy() end
+
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "NANG_SAFE_EXECUTE_STATUS"
+        gui.ResetOnSpawn = false
+        gui.DisplayOrder = 999999
+        gui.Parent = parent
+
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(0, 360, 0, 150)
+        frame.Position = UDim2.new(0.5, -180, 0.08, 0)
+        frame.BackgroundColor3 = Color3.fromRGB(24,24,24)
+        frame.BorderSizePixel = 0
+        frame.Parent = gui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 12)
+        corner.Parent = frame
+
+        local title = Instance.new("TextLabel")
+        title.BackgroundTransparency = 1
+        title.Size = UDim2.new(1, -30, 0, 32)
+        title.Position = UDim2.new(0, 15, 0, 12)
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 17
+        title.TextColor3 = Color3.fromRGB(235,235,235)
+        title.Text = "NANG RBXM • SAFE EXECUTE"
+        title.Parent = frame
+
+        local status = Instance.new("TextLabel")
+        status.BackgroundTransparency = 1
+        status.Size = UDim2.new(1, -30, 0, 55)
+        status.Position = UDim2.new(0, 15, 0, 48)
+        status.Font = Enum.Font.Gotham
+        status.TextSize = 12
+        status.TextWrapped = true
+        status.TextXAlignment = Enum.TextXAlignment.Left
+        status.TextYAlignment = Enum.TextYAlignment.Top
+        status.TextColor3 = Color3.fromRGB(206,206,206)
+        status.Text = "Script berhasil Execute, tetapi ada fitur yang gagal dimuat.\nFREE tetap dapat dijalankan setelah error diperbaiki."
+        status.Parent = frame
+
+        local close = Instance.new("TextButton")
+        close.Size = UDim2.new(0, 90, 0, 28)
+        close.Position = UDim2.new(1, -105, 1, -38)
+        close.BackgroundColor3 = Color3.fromRGB(66,66,66)
+        close.BorderSizePixel = 0
+        close.Font = Enum.Font.GothamBold
+        close.TextSize = 11
+        close.TextColor3 = Color3.fromRGB(240,240,240)
+        close.Text = "CLOSE"
+        close.Parent = frame
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 7)
+        c.Parent = close
+        close.MouseButton1Click:Connect(function() gui:Destroy() end)
+    end)
+end
