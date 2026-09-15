@@ -613,172 +613,131 @@ local function normalizeLocalPath(path)
     return path
 end
 
+local NANG_LOAD_TIMEOUT = 12
+local NANG_LOAD_BUSY = false
+
+local function runWithTimeout(fn, timeout)
+    local finished = false
+    local okResult, resultA, resultB = false, nil, nil
+    task.spawn(function()
+        local ok, a, b = pcall(fn)
+        if not finished then
+            okResult, resultA, resultB = ok, a, b
+            finished = true
+        end
+    end)
+    local started = os.clock()
+    while not finished and (os.clock() - started) < timeout do
+        task.wait(0.05)
+    end
+    if not finished then
+        return false, nil, "Timeout setelah " .. tostring(timeout) .. " detik"
+    end
+    if not okResult then return false, nil, tostring(resultA) end
+    return true, resultA, resultB
+end
+
 local function getLocalAsset(path)
-    -- Executor Android biasanya memakai getcustomasset; beberapa memakai getsynasset.
-    local providers = {
-        type(getcustomasset) == "function" and getcustomasset or nil,
-        type(getsynasset) == "function" and getsynasset or nil,
-    }
+    local providers = {}
+    if type(getcustomasset) == "function" then table.insert(providers, getcustomasset) end
+    if type(getsynasset) == "function" then table.insert(providers, getsynasset) end
+    if type(getgenv) == "function" then
+        local ok, env = pcall(getgenv)
+        if ok and type(env) == "table" then
+            if type(env.getcustomasset) == "function" then table.insert(providers, env.getcustomasset) end
+            if type(env.getsynasset) == "function" then table.insert(providers, env.getsynasset) end
+        end
+    end
     for _, provider in ipairs(providers) do
         local ok, asset = pcall(provider, path)
-        if ok and type(asset) == "string" and asset ~= "" then
-            return asset
-        end
+        if ok and type(asset) == "string" and asset ~= "" then return asset end
     end
     return nil
 end
 
 local function loadObjectsFromLocal(path)
-    path = normalizeLocalPath(path)
+    -- Jangan memanggil GetObjects tanpa timeout: pada beberapa Android executor
+    -- panggilan ini bisa menunggu selamanya dan tombol INSERT terlihat stuck.
+    local attempts = {}
 
-    -- ============================================================
-    -- NANG SAFE LOCAL RBXM LOADER
-    -- Mencoba semua loader yang umum tersedia di Android/Studio Lite.
-    -- Tidak langsung error hanya karena satu method tidak tersedia.
-    -- ============================================================
-    local errors = {}
-
-    local function tryLoad(label, fn)
-        local ok, result = pcall(fn)
-        if ok and result then
-            if type(result) == "table" and #result > 0 then
-                return result
-            end
-            -- Beberapa environment mengembalikan Instance tunggal.
-            if typeof(result) == "Instance" then
-                return {result}
-            end
-        elseif not ok then
-            table.insert(errors, label .. ": " .. tostring(result))
-        end
-        return nil
-    end
-
-    -- 1. Studio/compatible local asset loader.
     if type(LoadLocalAsset) == "function" then
-        local objects = tryLoad("LoadLocalAsset", function()
+        table.insert(attempts, function()
             return LoadLocalAsset(path)
         end)
-        if objects then return objects end
     end
 
-    if InsertService and type(InsertService.LoadLocalAsset) == "function" then
-        local objects = tryLoad("InsertService.LoadLocalAsset", function()
-            return InsertService:LoadLocalAsset(path)
+    local assetUri = getLocalAsset(path)
+    if assetUri then
+        table.insert(attempts, function()
+            return game:GetObjects(assetUri)
         end)
-        if objects then return objects end
     end
 
-    -- 2. Executor local-asset providers.
-    local providers = {}
-    if type(getcustomasset) == "function" then
-        table.insert(providers, {"getcustomasset", getcustomasset})
-    end
-    if type(getsynasset) == "function" then
-        table.insert(providers, {"getsynasset", getsynasset})
-    end
-    if type(getgenv) == "function" then
-        local ok, env = pcall(getgenv)
-        if ok and type(env) == "table" then
-            if type(env.getcustomasset) == "function" then
-                table.insert(providers, {"getgenv.getcustomasset", env.getcustomasset})
-            end
-            if type(env.getsynasset) == "function" then
-                table.insert(providers, {"getgenv.getsynasset", env.getsynasset})
-            end
-        end
-    end
-
-    for _, providerInfo in ipairs(providers) do
-        local providerName, provider = providerInfo[1], providerInfo[2]
-        local okAsset, assetUri = pcall(provider, path)
-
-        if okAsset and type(assetUri) == "string" and assetUri ~= "" then
-            -- GetObjects dengan URI hasil provider.
-            local objects = tryLoad(providerName .. " -> GetObjects", function()
-                return game:GetObjects(assetUri)
-            end)
-            if objects then return objects end
-
-            -- Beberapa executor hanya menerima URI rbxasset://.
-            local variants = {
-                "rbxasset://" .. path,
-                "rbxasset:///" .. path,
-                "rbxassetid://" .. path
-            }
-
-            for _, uri in ipairs(variants) do
-                objects = tryLoad(providerName .. " -> " .. uri, function()
-                    return game:GetObjects(uri)
-                end)
-                if objects then return objects end
-            end
-        end
-    end
-
-    -- 3. Direct GetObjects variants. Ada environment yang bisa
-    -- membaca file lokal tanpa getcustomasset.
-    local directVariants = {
-        path,
-        "file://" .. path,
-        "rbxasset://" .. path,
-        "rbxasset:///" .. path
-    }
-
-    for _, uri in ipairs(directVariants) do
-        local objects = tryLoad("GetObjects(" .. uri .. ")", function()
-            return game:GetObjects(uri)
+    if game.GetObjects then
+        table.insert(attempts, function()
+            return game:GetObjects("rbxasset://" .. path)
         end)
-        if objects then return objects end
     end
 
-    return nil, (#errors > 0 and errors[#errors]) or
-        "RBXM belum bisa dibuka oleh environment ini. Loader lokal tidak tersedia."
+    local lastErr = "Tidak ada loader local asset yang tersedia"
+    for _, attempt in ipairs(attempts) do
+        local ok, objects, err = runWithTimeout(attempt, NANG_LOAD_TIMEOUT)
+        if ok and type(objects) == "Instance" then objects = {objects} end
+        if ok and type(objects) == "table" and #objects > 0 then
+            return objects
+        end
+        if err then lastErr = tostring(err) end
+    end
+
+    if assetUri then
+        lastErr = "Loader lokal timeout/gagal membuka asset. Executor/Studio Lite tidak memberi akses import RBXM lokal."
+    end
+    return nil, lastErr
 end
+
 local function loadFile(fileInfo)
-    local isRbxl = fileInfo.ftype == "RBXL"
-    local path = normalizeLocalPath(fileInfo.path)
-    if path == "" then return false, "Path file kosong" end
+    if NANG_LOAD_BUSY then return false, "Masih ada proses import yang berjalan" end
+    NANG_LOAD_BUSY = true
 
-    local data, readErr = safeReadFile(path)
-    if not data then return false, readErr end
+    local okFinal, msgFinal
+    local okRun, runErr = pcall(function()
+        local isRbxl = fileInfo.ftype == "RBXL"
+        local path = normalizeLocalPath(fileInfo.path)
+        if path == "" then okFinal, msgFinal = false, "Path file kosong"; return end
 
-    -- Validasi dasar supaya file yang dipilih memang RBXM/RBXMX.
-    if not isRbxl then
-        local header = data:sub(1, 8)
-        if header ~= "<roblox!" then
-            return false, "File bukan RBXM/RBXMX yang valid"
+        local data, readErr = safeReadFile(path)
+        if not data then okFinal, msgFinal = false, readErr; return end
+
+        if not isRbxl then
+            local header = data:sub(1, 8)
+            if header ~= "<roblox!" then
+                okFinal, msgFinal = false, "File bukan RBXM/RBXMX yang valid"; return
+            end
         end
-    end
 
-    local sourceMap = {}
-    if not isRbxl then
-        local ok, sources = pcall(parseRBXMForSources, data)
-        if ok and type(sources) == "table" then sourceMap = sources end
-    end
-
-    -- Cara utama: ubah file lokal menjadi rbxasset:// lalu buka sebagai Objects.
-    local objects, loadErr = loadObjectsFromLocal(path)
-    if objects then
-        for _, obj in ipairs(objects) do captureLiveSources(obj) end
-        local count = insertObjects(objects, isRbxl, sourceMap)
-        if count > 0 then
-            return true, count .. " object(s) loaded"
+        -- Sengaja tidak menjalankan parseRBXMForSources di awal.
+        -- Parser lama hanya mengambil Source, bukan membuat Instance, dan bisa
+        -- membuat import terasa macet pada file besar. Source akan dicapture
+        -- setelah Roblox berhasil membuka object.
+        local sourceMap = {}
+        local objects, loadErr = loadObjectsFromLocal(path)
+        if objects then
+            for _, obj in ipairs(objects) do captureLiveSources(obj) end
+            local count = insertObjects(objects, isRbxl, sourceMap)
+            if count > 0 then
+                okFinal, msgFinal = true, count .. " object(s) loaded"
+                return
+            end
+            okFinal, msgFinal = false, "Asset terbuka tetapi object tidak bisa dimasukkan ke Workspace"
+            return
         end
-        return false, "File terbuka tetapi object tidak bisa dimasukkan ke Workspace"
-    end
 
-    -- Fallback untuk executor lama.
-    local ok2, objects2 = pcall(function()
-        return game:GetObjects("rbxasset://" .. path)
+        okFinal, msgFinal = false, loadErr or "RBXM tidak bisa dibuka oleh loader lokal"
     end)
-    if ok2 and type(objects2) == "table" and #objects2 > 0 then
-        for _, obj in ipairs(objects2) do captureLiveSources(obj) end
-        local count = insertObjects(objects2, isRbxl, sourceMap)
-        if count > 0 then return true, count .. " object(s) loaded" end
-    end
 
-    return false, loadErr or "RBXM tidak bisa dibuka oleh executor ini"
+    NANG_LOAD_BUSY = false
+    if not okRun then return false, "Import error: " .. tostring(runErr) end
+    return okFinal == true, msgFinal or "Import gagal"
 end
 
 -- ═══════════════════════════════════════════════════════════════════════
