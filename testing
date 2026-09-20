@@ -1,113 +1,310 @@
---[[
-    NANG ANCHOR TOOL
-    Anchor / Unanchor All
-    BY NANG
-]]
+--==================================================
+-- NANG ANCHOR TOOL
+-- Anchor / Unanchor All
+-- BY NANG
+--==================================================
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
--- Hapus UI lama kalau ada
-local old = player.PlayerGui:FindFirstChild("NANG_AnchorTool")
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Hapus UI lama
+local old = playerGui:FindFirstChild("NANG_ANCHOR_TOOL")
 if old then
     old:Destroy()
 end
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "NANG_AnchorTool"
-gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+--==================================================
+-- GUI
+--==================================================
 
--- MAIN FRAME
-local frame = Instance.new("Frame")
-frame.Size = UDim2.fromOffset(230, 155)
-frame.Position = UDim2.new(0.5, -115, 0.5, -77)
-frame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
-frame.BorderSizePixel = 0
-frame.Parent = gui
+local gui = Instance.new("ScreenGui")
+gui.Name = "NANG_ANCHOR_TOOL"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = playerGui
+
+-- MAIN
+local main = Instance.new("Frame")
+main.Size = UDim2.fromOffset(240, 180)
+main.Position = UDim2.new(0.5, -120, 0.5, -90)
+main.BackgroundColor3 = Color3.fromRGB(20,20,20)
+main.BorderSizePixel = 0
+main.Parent = gui
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 10)
-corner.Parent = frame
+corner.CornerRadius = UDim.new(0,10)
+corner.Parent = main
 
--- TITLE
+--==================================================
+-- HEADER
+--==================================================
+
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1,0,0,45)
+header.BackgroundColor3 = Color3.fromRGB(28,28,28)
+header.BorderSizePixel = 0
+header.Parent = main
+
+local headerCorner = Instance.new("UICorner")
+headerCorner.CornerRadius = UDim.new(0,10)
+headerCorner.Parent = header
+
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 32)
-title.Position = UDim2.fromOffset(10, 8)
+title.Size = UDim2.new(1,-80,1,0)
+title.Position = UDim2.fromOffset(12,0)
 title.BackgroundTransparency = 1
 title.Text = "ANCHOR TOOL"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextSize = 17
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.TextSize = 15
 title.Font = Enum.Font.GothamBold
-title.Parent = frame
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = header
 
 -- BY NANG
-local creator = Instance.new("TextLabel")
-creator.Size = UDim2.new(1, -20, 0, 20)
-creator.Position = UDim2.fromOffset(10, 35)
-creator.BackgroundTransparency = 1
-creator.Text = "BY NANG"
-creator.TextColor3 = Color3.fromRGB(150, 150, 150)
-creator.TextSize = 11
-creator.Font = Enum.Font.Gotham
-creator.Parent = frame
+local by = Instance.new("TextLabel")
+by.Size = UDim2.new(1,-80,0,15)
+by.Position = UDim2.fromOffset(12,27)
+by.BackgroundTransparency = 1
+by.Text = "BY NANG"
+by.TextColor3 = Color3.fromRGB(130,130,130)
+by.TextSize = 9
+by.Font = Enum.Font.Gotham
+by.TextXAlignment = Enum.TextXAlignment.Left
+by.Parent = header
 
--- ANCHOR BUTTON
-local anchor = Instance.new("TextButton")
-anchor.Size = UDim2.new(1, -20, 0, 35)
-anchor.Position = UDim2.fromOffset(10, 60)
-anchor.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-anchor.Text = "⚓  ANCHOR ALL  •  OFF"
-anchor.TextColor3 = Color3.fromRGB(255, 255, 255)
-anchor.TextSize = 13
-anchor.Font = Enum.Font.GothamBold
-anchor.BorderSizePixel = 0
-anchor.Parent = frame
+-- MINIMIZE
+local mini = Instance.new("TextButton")
+mini.Size = UDim2.fromOffset(32,30)
+mini.Position = UDim2.new(1,-70,0,7)
+mini.BackgroundColor3 = Color3.fromRGB(45,45,45)
+mini.Text = "—"
+mini.TextColor3 = Color3.fromRGB(255,255,255)
+mini.TextSize = 18
+mini.Font = Enum.Font.GothamBold
+mini.BorderSizePixel = 0
+mini.Parent = header
 
-local anchorCorner = Instance.new("UICorner")
-anchorCorner.CornerRadius = UDim.new(0, 7)
-anchorCorner.Parent = anchor
+local mc = Instance.new("UICorner")
+mc.CornerRadius = UDim.new(0,7)
+mc.Parent = mini
 
--- UNANCHOR BUTTON
-local unanchor = Instance.new("TextButton")
-unanchor.Size = UDim2.new(1, -20, 0, 35)
-unanchor.Position = UDim2.fromOffset(10, 103)
-unanchor.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-unanchor.Text = "⚓  UNANCHOR ALL"
-unanchor.TextColor3 = Color3.fromRGB(255, 255, 255)
-unanchor.TextSize = 13
-unanchor.Font = Enum.Font.GothamBold
-unanchor.BorderSizePixel = 0
-unanchor.Parent = frame
+-- CLOSE
+local close = Instance.new("TextButton")
+close.Size = UDim2.fromOffset(32,30)
+close.Position = UDim2.new(1,-35,0,7)
+close.BackgroundColor3 = Color3.fromRGB(45,45,45)
+close.Text = "×"
+close.TextColor3 = Color3.fromRGB(255,255,255)
+close.TextSize = 18
+close.Font = Enum.Font.GothamBold
+close.BorderSizePixel = 0
+close.Parent = header
 
-local unanchorCorner = Instance.new("UICorner")
-unanchorCorner.CornerRadius = UDim.new(0, 7)
-unanchorCorner.Parent = unanchor
+local cc = Instance.new("UICorner")
+cc.CornerRadius = UDim.new(0,7)
+cc.Parent = close
 
-local anchored = false
+--==================================================
+-- BUTTON CREATOR
+--==================================================
 
--- ANCHOR ALL
-anchor.MouseButton1Click:Connect(function()
+local function makeButton(text, y)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1,-20,0,40)
+    b.Position = UDim2.fromOffset(10,y)
+    b.BackgroundColor3 = Color3.fromRGB(38,38,38)
+    b.Text = text
+    b.TextColor3 = Color3.fromRGB(255,255,255)
+    b.TextSize = 13
+    b.Font = Enum.Font.GothamBold
+    b.BorderSizePixel = 0
+    b.AutoButtonColor = true
+    b.Parent = main
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0,8)
+    c.Parent = b
+
+    return b
+end
+
+local anchorButton = makeButton("ANCHOR ALL  •  OFF",55)
+local unanchorButton = makeButton("UNANCHOR ALL",105)
+
+-- STATUS
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1,-20,0,20)
+status.Position = UDim2.fromOffset(10,153)
+status.BackgroundTransparency = 1
+status.Text = "Status: Ready"
+status.TextColor3 = Color3.fromRGB(150,150,150)
+status.TextSize = 10
+status.Font = Enum.Font.Gotham
+status.Parent = main
+
+--==================================================
+-- ANCHOR FUNCTION
+--==================================================
+
+local function anchorAll()
+    local count = 0
+
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") then
-            obj.Anchored = true
+            pcall(function()
+                obj.Anchored = true
+                count += 1
+            end)
         end
     end
 
-    anchored = true
-    anchor.Text = "⚓  ANCHOR ALL  •  ON"
-    anchor.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    return count
+end
+
+--==================================================
+-- UNANCHOR FUNCTION
+--==================================================
+
+local function unanchorAll()
+    local count = 0
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            pcall(function()
+                obj.Anchored = false
+                count += 1
+            end)
+        end
+    end
+
+    return count
+end
+
+--==================================================
+-- ANCHOR BUTTON
+--==================================================
+
+local isAnchored = false
+
+anchorButton.MouseButton1Click:Connect(function()
+
+    local count = anchorAll()
+
+    isAnchored = true
+
+    anchorButton.Text = "ANCHOR ALL  •  ON"
+    anchorButton.BackgroundColor3 = Color3.fromRGB(65,65,65)
+
+    status.Text = "Anchored: "..count.." parts"
+
 end)
 
--- UNANCHOR ALL
-unanchor.MouseButton1Click:Connect(function()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            obj.Anchored = false
-        end
-    end
+--==================================================
+-- UNANCHOR BUTTON
+--==================================================
 
-    anchored = false
-    anchor.Text = "⚓  ANCHOR ALL  •  OFF"
-    anchor.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+unanchorButton.MouseButton1Click:Connect(function()
+
+    local count = unanchorAll()
+
+    isAnchored = false
+
+    anchorButton.Text = "ANCHOR ALL  •  OFF"
+    anchorButton.BackgroundColor3 = Color3.fromRGB(38,38,38)
+
+    status.Text = "Unanchored: "..count.." parts"
+
+end)
+
+--==================================================
+-- MINIMIZE
+--==================================================
+
+local minimized = false
+
+mini.MouseButton1Click:Connect(function()
+
+    minimized = not minimized
+
+    if minimized then
+
+        for _, obj in ipairs(main:GetChildren()) do
+            if obj ~= header and obj ~= corner then
+                obj.Visible = false
+            end
+        end
+
+        main.Size = UDim2.fromOffset(240,45)
+        mini.Text = "+"
+        
+    else
+
+        main.Size = UDim2.fromOffset(240,180)
+
+        for _, obj in ipairs(main:GetChildren()) do
+            if obj ~= header and obj ~= corner then
+                obj.Visible = true
+            end
+        end
+
+        mini.Text = "—"
+
+    end
+end)
+
+--==================================================
+-- CLOSE
+--==================================================
+
+close.MouseButton1Click:Connect(function()
+    gui:Destroy()
+end)
+
+--==================================================
+-- DRAG / MOVE UI
+--==================================================
+
+local dragging = false
+local dragStart
+local startPos
+
+header.InputBegan:Connect(function(input)
+
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+
+        dragging = true
+        dragStart = input.Position
+        startPos = main.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+header.InputChanged:Connect(function(input)
+
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+    or input.UserInputType == Enum.UserInputType.Touch then
+
+        input.Changed:Connect(function()
+            if dragging then
+
+                local delta = input.Position - dragStart
+
+                main.Position = UDim2.new(
+                    startPos.X.Scale,
+                    startPos.X.Offset + delta.X,
+                    startPos.Y.Scale,
+                    startPos.Y.Offset + delta.Y
+                )
+
+            end
+        end)
+    end
 end)
