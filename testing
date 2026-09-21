@@ -1,413 +1,459 @@
---==================================================
--- NANG ANCHOR TOOL
--- EDITING MODE
--- BY NANG
---==================================================
+--[[
+    â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
+    â•‘               TERRAIN GENERATOR PRO                         â•‘
+    â•‘                                                              â•‘
+    â•‘  Pemilik / Pembuat  : SYGKMUNII                             â•‘
+    â•‘  Versi              : 1.0.0                                  â•‘
+    â•‘  Platform           : Roblox (Script)                        â•‘
+    â•‘                                                              â•‘
+    â•‘  âš ï¸  PERINGATAN PENTING âš ï¸                                   â•‘
+    â•‘  Script ini adalah hak milik intelektual dari SYGKMUNII.   â•‘
+    â•‘  Anda DILARANG KERAS menjual, menjual kembali, atau         â•‘
+    â•‘  mendistribusikan script ini untuk keuntungan finansial     â•‘
+    â•‘  dalam bentuk apapun.                                        â•‘
+    â•‘                                                              â•‘
+    â•‘  âœ… BOLEH:                                                    â•‘
+    â•‘     - Menggunakan script ini untuk proyek pribadi           â•‘
+    â•‘     - Membagikan script ini secara GRATIS (dengan kredit)   â•‘
+    â•‘     - Memodifikasi script ini untuk kebutuhan pribadi       â•‘
+    â•‘                                                              â•‘
+    â•‘  âŒ DILARANG:                                                 â•‘
+    â•‘     - Menjual atau memonetisasi script ini                  â•‘
+    â•‘     - Mengaku sebagai pembuat atau pemilik script ini       â•‘
+    â•‘     - Menghapus atau mengubah header kepemilikan ini        â•‘
+    â•‘     - Mendistribusikan tanpa mencantumkan kredit            â•‘
+    â•‘                                                              â•‘
+    â•‘  Pelanggar akan dilaporkan. Hormati karya pembuat!          â•‘
+    â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+--]]
 
-local CoreGui = game:GetService("CoreGui")
-
-pcall(function()
-    local old = CoreGui:FindFirstChild("NANG_ANCHOR_TOOL")
-    if old then
-        old:Destroy()
+local Terrain = workspace.Terrain
+local part = script.Parent
+local seed = tick()
+ 
+-- =====================================================
+-- ================== PENGATURAN =======================
+-- =====================================================
+ 
+-- MAP
+local PANJANG_MAP = 3000
+local LEBAR_MAP   = 5000
+local EXTRA_END   = 4000
+local STEP = 4
+ 
+-- ZONA (PROPORSI MAP) - DIUBAH KE PANJANG ABSOLUT
+local PANJANG_ZONA_BUKIT = 4000
+local PANJANG_ZONA_KAKI = 1500
+ 
+-- KETINGGIAN DASAR BERTAHAP
+local KETINGGIAN_TERRAIN_AWAL = 60
+local KETINGGIAN_TERRAIN_TENGAH = 800
+local KETINGGIAN_TERRAIN_AKHIR = 1100
+ 
+-- TINGGI BUKIT RELATIF
+local TINGGI_BUKIT = 220
+ 
+-- NOISE
+local NOISE_SCALE = 0.015
+local SMOOTHING = 0.6
+ 
+-- ================= DANAU =================
+local POS_DANAU_X = -PANJANG_MAP/2 + 1500
+local POS_DANAU_Z = 0
+local RADIUS_DANAU = 260
+local KEDALAMAN_DANAU = 160
+local TINGGI_AIR_TETAP = 35  -- Tinggi air TETAP tidak terpengaruh terrain
+local LEBAR_PANTAI = 28
+local NOISE_PANTAI = 30
+local JARAK_AMAN_DANAU = 280
+ 
+-- ================= GUNUNG UTAMA =================
+local OFFSET_GUNUNG = 10
+local TINGGI_GUNUNG = 900
+local LEBAR_GUNUNG = 650
+local PUNCAK_TUMPUL = 90
+ 
+-- KAWAH
+local RADIUS_KAWAH = 80
+local KEDALAMAN_KAWAH = 60
+ 
+-- ================= JALAN BUKIT =================
+local LEBAR_JALUR_BUKIT = 24
+local ZIGZAG_AMP_BUKIT = 200
+local ZIGZAG_LEN_BUKIT = 200
+local TINGGI_JALAN_OFFSET = -4
+ 
+-- ================= JALAN KAKI GUNUNG (INDEPENDEN) =================
+local LEBAR_JALUR_KAKI = 12
+local ZIGZAG_AMP_KAKI = 100
+local ZIGZAG_LEN_KAKI = 150
+ 
+-- ================= RINTANGAN BUKIT =================
+local BUKIT_LEBAR_RINTANGAN = 70
+local BUKIT_DALAM_RINTANGAN = 60
+local BUKIT_PANJANG_RINTANGAN = 70
+local BUKIT_JARAK_RINTANGAN = 300
+ 
+-- LEBAR KOLAM KIRI DAN KANAN
+local BUKIT_LEBAR_KIRI = 90
+local BUKIT_LEBAR_KANAN = 90
+ 
+-- ================= RINTANGAN KAKI GUNUNG =================
+local KAKI_LEBAR_RINTANGAN = 0
+local KAKI_DALAM_RINTANGAN = 0
+local KAKI_PANJANG_RINTANGAN = 0
+local KAKI_JARAK_RINTANGAN = 0
+ 
+-- =====================================================
+-- ================== UTIL =============================
+-- =====================================================
+ 
+local PUSAT = part.Position
+ 
+-- Set warna rumput SEBELUM mulai build
+Terrain:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(35, 65, 35))
+ 
+-- Cek apakah map sudah dibangun
+local mapMarker = workspace:FindFirstChild("__TERRAIN_BUILT__")
+if mapMarker then
+    part:Destroy()
+    return
+end
+ 
+local function clamp(h)
+    if h < 2 then return 2 end
+    return h
+end
+ 
+local function noise(x,z)
+    return math.noise(x*NOISE_SCALE, z*NOISE_SCALE, seed)
+end
+ 
+local function zona(x)
+    local posRelative = x + PANJANG_MAP/2
+    
+    if posRelative < PANJANG_ZONA_BUKIT then
+        return "BUKIT"
     end
-end)
-
---==================================================
--- GUI
---==================================================
-
-local gui = Instance.new("ScreenGui")
-gui.Name = "NANG_ANCHOR_TOOL"
-gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true
-gui.Parent = CoreGui
-
-local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(250, 185)
-main.Position = UDim2.new(0.5, -125, 0.5, -92)
-main.BackgroundColor3 = Color3.fromRGB(18,18,18)
-main.BorderSizePixel = 0
-main.Parent = gui
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0,10)
-corner.Parent = main
-
---==================================================
--- HEADER
---==================================================
-
-local header = Instance.new("Frame")
-header.Size = UDim2.new(1,0,0,45)
-header.BackgroundColor3 = Color3.fromRGB(28,28,28)
-header.BorderSizePixel = 0
-header.Parent = main
-
-local hc = Instance.new("UICorner")
-hc.CornerRadius = UDim.new(0,10)
-hc.Parent = header
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1,-75,0,23)
-title.Position = UDim2.fromOffset(10,3)
-title.BackgroundTransparency = 1
-title.Text = "ANCHOR TOOL"
-title.TextColor3 = Color3.new(1,1,1)
-title.TextSize = 15
-title.Font = Enum.Font.GothamBold
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = header
-
-local by = Instance.new("TextLabel")
-by.Size = UDim2.new(1,-75,0,15)
-by.Position = UDim2.fromOffset(10,26)
-by.BackgroundTransparency = 1
-by.Text = "BY NANG"
-by.TextColor3 = Color3.fromRGB(145,145,145)
-by.TextSize = 9
-by.Font = Enum.Font.Gotham
-by.TextXAlignment = Enum.TextXAlignment.Left
-by.Parent = header
-
---==================================================
--- MINIMIZE
---==================================================
-
-local minimize = Instance.new("TextButton")
-minimize.Size = UDim2.fromOffset(30,30)
-minimize.Position = UDim2.new(1,-68,0,7)
-minimize.BackgroundColor3 = Color3.fromRGB(45,45,45)
-minimize.Text = "—"
-minimize.TextColor3 = Color3.new(1,1,1)
-minimize.TextSize = 17
-minimize.Font = Enum.Font.GothamBold
-minimize.BorderSizePixel = 0
-minimize.Parent = header
-
-local mic = Instance.new("UICorner")
-mic.CornerRadius = UDim.new(0,7)
-mic.Parent = minimize
-
---==================================================
--- CLOSE
---==================================================
-
-local close = Instance.new("TextButton")
-close.Size = UDim2.fromOffset(30,30)
-close.Position = UDim2.new(1,-34,0,7)
-close.BackgroundColor3 = Color3.fromRGB(45,45,45)
-close.Text = "×"
-close.TextColor3 = Color3.new(1,1,1)
-close.TextSize = 18
-close.Font = Enum.Font.GothamBold
-close.BorderSizePixel = 0
-close.Parent = header
-
-local clc = Instance.new("UICorner")
-clc.CornerRadius = UDim.new(0,7)
-clc.Parent = close
-
---==================================================
--- STATUS
---==================================================
-
-local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1,-20,0,22)
-status.Position = UDim2.fromOffset(10,50)
-status.BackgroundTransparency = 1
-status.Text = "Scanning Workspace..."
-status.TextColor3 = Color3.fromRGB(150,150,150)
-status.TextSize = 10
-status.Font = Enum.Font.Gotham
-status.Parent = main
-
---==================================================
--- ANCHOR BUTTON
---==================================================
-
-local anchorButton = Instance.new("TextButton")
-anchorButton.Size = UDim2.new(1,-20,0,40)
-anchorButton.Position = UDim2.fromOffset(10,73)
-anchorButton.BackgroundColor3 = Color3.fromRGB(42,42,42)
-anchorButton.Text = "ANCHOR ALL   •   OFF"
-anchorButton.TextColor3 = Color3.new(1,1,1)
-anchorButton.TextSize = 13
-anchorButton.Font = Enum.Font.GothamBold
-anchorButton.BorderSizePixel = 0
-anchorButton.Parent = main
-
-local abc = Instance.new("UICorner")
-abc.CornerRadius = UDim.new(0,8)
-abc.Parent = anchorButton
-
---==================================================
--- UNANCHOR BUTTON
---==================================================
-
-local unanchorButton = Instance.new("TextButton")
-unanchorButton.Size = UDim2.new(1,-20,0,40)
-unanchorButton.Position = UDim2.fromOffset(10,118)
-unanchorButton.BackgroundColor3 = Color3.fromRGB(42,42,42)
-unanchorButton.Text = "UNANCHOR ALL"
-unanchorButton.TextColor3 = Color3.new(1,1,1)
-unanchorButton.TextSize = 13
-unanchorButton.Font = Enum.Font.GothamBold
-unanchorButton.BorderSizePixel = 0
-unanchorButton.Parent = main
-
-local ubc = Instance.new("UICorner")
-ubc.CornerRadius = UDim.new(0,8)
-ubc.Parent = unanchorButton
-
---==================================================
--- CEK APAKAH OBJEK HARUS DIABAIKAN
---==================================================
-
-local function shouldIgnore(obj)
-
-    -- Baseplate
-    if obj.Name:lower() == "baseplate" then
-        return true
+    
+    if posRelative < PANJANG_ZONA_BUKIT + PANJANG_ZONA_KAKI then
+        return "KAKI_GUNUNG"
     end
-
-    -- SpawnLocation
-    if obj:IsA("SpawnLocation") then
-        return true
+    
+    return "GUNUNG"
+end
+ 
+local function getZonaBounds()
+    local startMap = -PANJANG_MAP/2
+    return {
+    BUKIT_START = startMap,
+    BUKIT_END = startMap + PANJANG_ZONA_BUKIT,
+    KAKI_START = startMap + PANJANG_ZONA_BUKIT,
+    KAKI_END = startMap + PANJANG_ZONA_BUKIT + PANJANG_ZONA_KAKI,
+    GUNUNG_START = startMap + PANJANG_ZONA_BUKIT + PANJANG_ZONA_KAKI
+    }
+end
+ 
+local bounds = getZonaBounds()
+local POS_GUNUNG = bounds.KAKI_END - LEBAR_GUNUNG/3 + OFFSET_GUNUNG
+ 
+-- =====================================================
+-- ======== KETINGGIAN DASAR BERTAHAP (SMOOTH) =========
+-- =====================================================
+ 
+-- Cache untuk smooth terrain height
+local terrainHeightCache = {}
+ 
+local function getTerrainBaseHeight(x)
+    -- Gunakan cache untuk konsistensi
+    local rounded = math.floor(x / STEP) * STEP
+    if terrainHeightCache[rounded] then
+        return terrainHeightCache[rounded]
     end
-
-    -- Character / NPC yang mempunyai Humanoid
-    local parent = obj.Parent
-
-    while parent and parent ~= workspace do
-
-        if parent:IsA("Model") then
-
-            if parent:FindFirstChildOfClass("Humanoid") then
-                return true
-            end
-
+    
+    local posRelative = x + PANJANG_MAP/2
+    local totalDistance = PANJANG_ZONA_BUKIT + PANJANG_ZONA_KAKI
+    
+    local height
+    if posRelative <= 0 then
+        height = KETINGGIAN_TERRAIN_AWAL
+    elseif posRelative >= totalDistance then
+        height = KETINGGIAN_TERRAIN_AKHIR
+    else
+        local progress = posRelative / totalDistance
+        
+        -- Smooth interpolasi dengan ease-in-out
+        local smoothProgress = progress * progress * (3 - 2 * progress)
+        
+        if smoothProgress < 0.5 then
+            local localProgress = smoothProgress / 0.5
+            height = KETINGGIAN_TERRAIN_AWAL + (KETINGGIAN_TERRAIN_TENGAH - KETINGGIAN_TERRAIN_AWAL) * localProgress
+        else
+            local localProgress = (smoothProgress - 0.5) / 0.5
+            height = KETINGGIAN_TERRAIN_TENGAH + (KETINGGIAN_TERRAIN_AKHIR - KETINGGIAN_TERRAIN_TENGAH) * localProgress
         end
-
-        parent = parent.Parent
     end
-
+    
+    terrainHeightCache[rounded] = height
+    return height
+end
+ 
+-- =====================================================
+-- ================== HEIGHT ===========================
+-- =====================================================
+ 
+local function bukitNatural(x,z,intensitas)
+    local n1 = noise(x,z)
+    local n2 = noise(x*0.5,z*0.5)
+    return (n1*0.7 + n2*0.3) * intensitas * SMOOTHING
+end
+ 
+local function baseHeight(x,z)
+    local baseTerrainHeight = getTerrainBaseHeight(x)
+    local zt = zona(x)
+    
+    if zt == "BUKIT" then
+        return baseTerrainHeight + bukitNatural(x,z,TINGGI_BUKIT)
+    elseif zt == "KAKI_GUNUNG" then
+        local posInKaki = x - bounds.KAKI_START
+        local progress = posInKaki / PANJANG_ZONA_KAKI
+        progress = math.clamp(progress, 0, 1)
+        
+        local extraHeight = 20 + progress * 40
+        
+        return baseTerrainHeight + bukitNatural(x,z,extraHeight)
+    else
+        return baseTerrainHeight
+    end
+end
+ 
+local function gunungHeight(x,z)
+    local dx = x - POS_GUNUNG
+    local dz = z
+    local d = math.sqrt(dx*dx + dz*dz)
+    
+    if d > LEBAR_GUNUNG then return 0 end
+    
+    if d < RADIUS_KAWAH then
+        local kawahDepth = (1 - d/RADIUS_KAWAH) * KEDALAMAN_KAWAH
+        return TINGGI_GUNUNG - kawahDepth
+    end
+    
+    if d < PUNCAK_TUMPUL then
+        return TINGGI_GUNUNG
+    end
+    
+    local k = 1 - ((d - PUNCAK_TUMPUL) / (LEBAR_GUNUNG - PUNCAK_TUMPUL))
+    k = math.clamp(k,0,1)
+    
+    local n = math.noise(dx*0.02, dz*0.02, seed) * 18
+    return (k^2.8) * TINGGI_GUNUNG + n
+end
+ 
+local function isInMountainArea(x, z)
+    local dx = x - POS_GUNUNG
+    local dz = z
+    local d = math.sqrt(dx*dx + dz*dz)
+    return d <= LEBAR_GUNUNG
+end
+ 
+-- =====================================================
+-- ================== DANAU ============================
+-- =====================================================
+ 
+local function danauInfo(x,z)
+    local dx = x - POS_DANAU_X
+    local dz = z - POS_DANAU_Z
+    local dist = math.sqrt(dx*dx + dz*dz)
+    local edge = noise(dx*0.02,dz*0.02)*NOISE_PANTAI
+    return dist, RADIUS_DANAU + edge
+end
+ 
+local function isNearLake(x, z)
+    local dist, radius = danauInfo(x, z)
+    return dist < (radius + JARAK_AMAN_DANAU)
+end
+ 
+-- =====================================================
+-- ================== JALAN ============================
+-- =====================================================
+ 
+local function pathZBukit(x)
+    return math.sin(x/ZIGZAG_LEN_BUKIT) * ZIGZAG_AMP_BUKIT
+end
+ 
+local function isPathBukit(x,z)
+    if zona(x) ~= "BUKIT" then return false end
+    if isInMountainArea(x, z) then return false end
+    return math.abs(z - pathZBukit(x)) < LEBAR_JALUR_BUKIT
+end
+ 
+local function pathZKaki(x)
+    return math.sin(x/ZIGZAG_LEN_KAKI) * ZIGZAG_AMP_KAKI
+end
+ 
+local function isPathKaki(x,z)
+    if zona(x) ~= "KAKI_GUNUNG" then return false end
+    if isInMountainArea(x, z) then return false end
+    return math.abs(z - pathZKaki(x)) < LEBAR_JALUR_KAKI
+end
+ 
+local function isPathGunung(x,z)
+    local dx = x - POS_GUNUNG
+    local dz = z
+    local d = math.sqrt(dx*dx + dz*dz)
+    if d > LEBAR_GUNUNG then return false end
+    
+    local angle = math.atan2(dz, dx)
+    local spiral = angle * 90
+    return math.abs(d - spiral) < LEBAR_JALUR_KAKI
+end
+ 
+local function getPathHeight(x)
+    return getTerrainBaseHeight(x) + TINGGI_JALAN_OFFSET
+end
+ 
+-- =====================================================
+-- ============= RINTANGAN (AUTO DETECT JALAN) =========
+-- =====================================================
+ 
+local function isRintanganBukit(x, z)
+    if zona(x) ~= "BUKIT" then return false end
+    if isInMountainArea(x, z) then return false end
+    if isNearLake(x, z) then return false end
+    
+    local posInZone = x - bounds.BUKIT_START
+    local pathCenter = pathZBukit(x)
+    
+    local rintanganNum = math.floor(posInZone / BUKIT_JARAK_RINTANGAN) + 1
+    local rintanganPos = (rintanganNum - 1) * BUKIT_JARAK_RINTANGAN
+    local rintanganStart = rintanganPos
+    local rintanganEnd = rintanganPos + BUKIT_PANJANG_RINTANGAN
+    
+    if posInZone >= rintanganStart and posInZone <= rintanganEnd then
+        local testX = bounds.BUKIT_START + rintanganStart + BUKIT_PANJANG_RINTANGAN/2
+        if isNearLake(testX, pathCenter) then
+            return false
+        end
+        
+        local offsetZ = z - pathCenter
+        if offsetZ >= -BUKIT_LEBAR_KIRI and offsetZ <= BUKIT_LEBAR_KANAN then
+            return true
+        end
+    end
+    
     return false
 end
-
---==================================================
--- CARI PART MAP
---==================================================
-
-local function getMapParts()
-
-    local result = {}
-
-    for _,obj in ipairs(workspace:GetDescendants()) do
-
-        if obj:IsA("BasePart") then
-
-            if not shouldIgnore(obj) then
-                table.insert(result,obj)
+ 
+local function isRintanganKaki(x, z)
+    if zona(x) ~= "KAKI_GUNUNG" then return false end
+    if not isPathKaki(x, z) then return false end
+    if isInMountainArea(x, z) then return false end
+    
+    return false
+end
+ 
+-- =====================================================
+-- ================== GENERATOR ========================
+-- =====================================================
+ 
+Terrain:Clear()
+task.wait(1)
+ 
+-- FASE 1: ZONA BUKIT (PENUH)
+for x = bounds.BUKIT_START, bounds.BUKIT_END, STEP do
+    if x % 80 == 0 then task.wait() end
+    
+    for z = -LEBAR_MAP/2, LEBAR_MAP/2, STEP do
+        local wx = PUSAT.X + x
+        local wz = PUSAT.Z + z
+        
+        local dist, radius = danauInfo(x,z)
+        local jalan = isPathBukit(x,z)
+        local rintangan = isRintanganBukit(x, z)
+        
+        if dist < radius then
+            -- Danau TETAP di ketinggian tetap
+            Terrain:FillBlock(
+            CFrame.new(wx, PUSAT.Y + (TINGGI_AIR_TETAP-KEDALAMAN_DANAU)/2, wz),
+            Vector3.new(STEP, clamp(KEDALAMAN_DANAU), STEP),
+            Enum.Material.Sand
+            )
+            Terrain:FillBlock(
+            CFrame.new(wx, PUSAT.Y + TINGGI_AIR_TETAP/2, wz),
+            Vector3.new(STEP, clamp(TINGGI_AIR_TETAP), STEP),
+            Enum.Material.Water
+            )
+        else
+            local h = baseHeight(x,z)
+            
+            if rintangan then
+                h = getPathHeight(x) - BUKIT_DALAM_RINTANGAN
+            elseif jalan then
+                h = getPathHeight(x)
             end
-
+            
+            h = clamp(h)
+            
+            local mat = (jalan or rintangan) and Enum.Material.Ground or Enum.Material.Grass
+            if dist < radius + LEBAR_PANTAI then mat = Enum.Material.Sand end
+            
+            Terrain:FillBlock(
+            CFrame.new(wx, PUSAT.Y + h/2, wz),
+            Vector3.new(STEP, h, STEP),
+            mat
+            )
         end
-
     end
-
-    return result
 end
-
---==================================================
--- ANCHOR ALL
---==================================================
-
-local function anchorAll()
-
-    local parts = getMapParts()
-    local count = 0
-
-    for _,part in ipairs(parts) do
-
-        pcall(function()
-
-            part.Anchored = true
-
-            -- memastikan property benar-benar berubah
-            if part.Anchored == true then
-                count += 1
+ 
+-- FASE 2: ZONA KAKI GUNUNG + GUNUNG
+for x = bounds.KAKI_START, PANJANG_MAP/2 + EXTRA_END, STEP do
+    if x % 80 == 0 then task.wait() end
+    
+    for z = -LEBAR_MAP/2, LEBAR_MAP/2, STEP do
+        local wx = PUSAT.X + x
+        local wz = PUSAT.Z + z
+        
+        local jalan = isPathKaki(x,z) or isPathGunung(x,z)
+        local rintangan = isRintanganKaki(x, z)
+        
+        local h = baseHeight(x,z)
+        local heightMountain = gunungHeight(x,z)
+        h = h + heightMountain
+        
+        if jalan then
+            local surfaceHeight = baseHeight(x,z) + heightMountain
+            
+            if rintangan then
+                h = surfaceHeight - KAKI_DALAM_RINTANGAN
+            else
+                h = surfaceHeight
             end
-
-        end)
-
+        end
+        
+        h = clamp(h)
+        
+        local mat = Enum.Material.Grass
+        if h > getTerrainBaseHeight(x) + 280 then
+            mat = Enum.Material.Rock
+        elseif jalan then
+            mat = Enum.Material.Ground
+        end
+        
+        Terrain:FillBlock(
+        CFrame.new(wx, PUSAT.Y + h/2, wz),
+        Vector3.new(STEP, h, STEP),
+        mat
+        )
     end
-
-    return count
 end
-
---==================================================
--- UNANCHOR ALL
---==================================================
-
-local function unanchorAll()
-
-    local parts = getMapParts()
-    local count = 0
-
-    for _,part in ipairs(parts) do
-
-        pcall(function()
-
-            part.Anchored = false
-
-            if part.Anchored == false then
-                count += 1
-            end
-
-        end)
-
-    end
-
-    return count
-end
-
---==================================================
--- INITIAL SCAN
---==================================================
-
-task.spawn(function()
-
-    task.wait(0.2)
-
-    local parts = getMapParts()
-
-    status.Text = "Map Parts: "..#parts
-
-end)
-
---==================================================
--- ANCHOR ON
---==================================================
-
-anchorButton.MouseButton1Click:Connect(function()
-
-    local count = anchorAll()
-
-    anchorButton.Text = "ANCHOR ALL   •   ON"
-    anchorButton.BackgroundColor3 = Color3.fromRGB(65,65,65)
-
-    status.Text = "Anchored: "..count.." Parts"
-
-end)
-
---==================================================
--- UNANCHOR
---==================================================
-
-unanchorButton.MouseButton1Click:Connect(function()
-
-    local count = unanchorAll()
-
-    anchorButton.Text = "ANCHOR ALL   •   OFF"
-    anchorButton.BackgroundColor3 = Color3.fromRGB(42,42,42)
-
-    status.Text = "Unanchored: "..count.." Parts"
-
-end)
-
---==================================================
--- MINIMIZE / EXPAND
---==================================================
-
-local minimized = false
-
-minimize.MouseButton1Click:Connect(function()
-
-    minimized = not minimized
-
-    if minimized then
-
-        main.Size = UDim2.fromOffset(250,45)
-
-        status.Visible = false
-        anchorButton.Visible = false
-        unanchorButton.Visible = false
-
-        minimize.Text = "+"
-
-    else
-
-        main.Size = UDim2.fromOffset(250,185)
-
-        status.Visible = true
-        anchorButton.Visible = true
-        unanchorButton.Visible = true
-
-        minimize.Text = "—"
-
-    end
-
-end)
-
---==================================================
--- CLOSE
---==================================================
-
-close.MouseButton1Click:Connect(function()
-    gui:Destroy()
-end)
-
---==================================================
--- DRAG UI
---==================================================
-
-local dragging = false
-local dragStart
-local startPos
-
-header.InputBegan:Connect(function(input)
-
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-    or input.UserInputType == Enum.UserInputType.Touch then
-
-        dragging = true
-        dragStart = input.Position
-        startPos = main.Position
-
-        input.Changed:Connect(function()
-
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-
-        end)
-
-    end
-
-end)
-
-header.InputChanged:Connect(function(input)
-
-    if input.UserInputType == Enum.UserInputType.MouseMovement
-    or input.UserInputType == Enum.UserInputType.Touch then
-
-        input.Changed:Connect(function()
-
-            if dragging then
-
-                local delta = input.Position - dragStart
-
-                main.Position = UDim2.new(
-                    startPos.X.Scale,
-                    startPos.X.Offset + delta.X,
-                    startPos.Y.Scale,
-                    startPos.Y.Offset + delta.Y
-                )
-
-            end
-
-        end)
-
-    end
-
-end)
+ 
+-- Buat marker bahwa terrain sudah dibangun
+local marker = Instance.new("BoolValue")
+marker.Name = "__TERRAIN_BUILT__"
+marker.Parent = workspace
+ 
+part:Destroy()
+
+print("[TERRAIN GENERATOR] âœ… Selesai! | Pemilik: SYGKMUNII")
