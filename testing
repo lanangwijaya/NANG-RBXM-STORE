@@ -38,9 +38,8 @@ local NANG_WHITELIST = {
 local NANG_KEY_SITE = "https://nang-key.vercel.app"
 local NANG_KEY_SECRET = "NANG2024"
 
--- Persisted across both modules and re-executes
 _G.NANG_ACCESS = _G.NANG_ACCESS or false
-_G.NANG_ACCESS_REASON = _G.NANG_ACCESS_REASON or nil  -- "whitelist" | "key"
+_G.NANG_ACCESS_REASON = _G.NANG_ACCESS_REASON or nil
 
 local function nangGetTimeWindow()
     return math.floor(os.time() / 86400)
@@ -1204,6 +1203,14 @@ local function launchNangRBXM()
         end
     end)
 
+    -- ═══════════════════════════════════════════════════════════════════
+    -- LOADING SCREEN — logo only + sound (slowed, heavier)
+    -- ═══════════════════════════════════════════════════════════════════
+    local LOADING_SOUND_ID     = "rbxassetid://132706662962034"
+    local LOADING_SOUND_VOLUME = 0.85
+    local LOADING_SOUND_LOOP   = true
+    local LOADING_SOUND_SPEED  = 0.8    -- <1 = slower + deeper/heavier
+
     local LoadingScreen = Instance.new("Frame", UI)
     LoadingScreen.Name = "LoadingScreen"
     LoadingScreen.Size = UDim2.new(1, 0, 1, 0)
@@ -1213,16 +1220,24 @@ local function launchNangRBXM()
 
     local Dim = Instance.new("Frame", LoadingScreen)
     Dim.Size = UDim2.new(1, 0, 1, 0)
-    Dim.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    Dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     Dim.BackgroundTransparency = 0.15
     Dim.BorderSizePixel = 0
     Dim.ZIndex = 999
+
+    local LoadingSound = Instance.new("Sound", LoadingScreen)
+    LoadingSound.Name         = "LoadingSound"
+    LoadingSound.SoundId      = LOADING_SOUND_ID
+    LoadingSound.Volume       = LOADING_SOUND_VOLUME
+    LoadingSound.Looped       = LOADING_SOUND_LOOP
+    LoadingSound.PlaybackSpeed = LOADING_SOUND_SPEED
+    LoadingSound.ZIndex       = 999
 
     local LCard = Instance.new("Frame", LoadingScreen)
     LCard.Name = "BootCard"
     LCard.AnchorPoint = Vector2.new(0.5, 0.5)
     LCard.Position = UDim2.new(0.5, 0, 0.5, 0)
-    LCard.Size = UDim2.new(0, 360, 0, 220)
+    LCard.Size = UDim2.new(0, 320, 0, 260)
     LCard.BackgroundColor3 = PALETTE.bg_panel
     LCard.BorderSizePixel = 0
     LCard.ZIndex = 1000
@@ -1233,48 +1248,25 @@ local function launchNangRBXM()
     LCardStroke.Color = PALETTE.accent
 
     local LLogo = Instance.new("ImageLabel", LCard)
-    LLogo.Size = UDim2.new(0, 44, 0, 44)
-    LLogo.Position = UDim2.new(0, 24, 0, 22)
+    LLogo.Size = UDim2.new(0, 120, 0, 120)
+    LLogo.Position = UDim2.new(0.5, -60, 0, 32)
     LLogo.BackgroundTransparency = 1
     LLogo.Image = NANG_LOGO
     LLogo.ZIndex = 1001
 
-    local LBrand = Instance.new("TextLabel", LCard)
-    LBrand.Size = UDim2.new(1, -100, 0, 36)
-    LBrand.Position = UDim2.new(0, 78, 0, 26)
-    LBrand.BackgroundTransparency = 1
-    LBrand.Text = "NANG RBXM"
-    LBrand.TextColor3 = PALETTE.accent_hover
-    LBrand.Font = Enum.Font.GothamBold
-    LBrand.TextSize = 22
-    LBrand.TextXAlignment = Enum.TextXAlignment.Left
-    LBrand.ZIndex = 1001
-
-    local LSub = Instance.new("TextLabel", LCard)
-    LSub.Size = UDim2.new(1, -48, 0, 20)
-    LSub.Position = UDim2.new(0, 24, 0, 76)
-    LSub.BackgroundTransparency = 1
-    LSub.Text = "Preparing your workspace"
-    LSub.TextColor3 = PALETTE.text_muted
-    LSub.Font = Enum.Font.Gotham
-    LSub.TextSize = 12
-    LSub.TextXAlignment = Enum.TextXAlignment.Left
-    LSub.ZIndex = 1001
-
-    local LStatus = Instance.new("TextLabel", LCard)
-    LStatus.Size = UDim2.new(1, -48, 0, 18)
-    LStatus.Position = UDim2.new(0, 24, 0, 110)
-    LStatus.BackgroundTransparency = 1
-    LStatus.Text = "Starting..."
-    LStatus.TextColor3 = PALETTE.text_primary
-    LStatus.Font = Enum.Font.GothamMedium
-    LStatus.TextSize = 11
-    LStatus.TextXAlignment = Enum.TextXAlignment.Left
-    LStatus.ZIndex = 1001
+    task.spawn(function()
+        while LLogo.Parent do
+            local t1 = TweenService:Create(LLogo, TweenInfo.new(1.1, Enum.EasingStyle.Sine), {ImageTransparency = 0.35})
+            t1:Play(); t1.Completed:Wait()
+            if not LLogo.Parent then break end
+            local t2 = TweenService:Create(LLogo, TweenInfo.new(1.1, Enum.EasingStyle.Sine), {ImageTransparency = 0})
+            t2:Play(); t2.Completed:Wait()
+        end
+    end)
 
     local LTrack = Instance.new("Frame", LCard)
-    LTrack.Size = UDim2.new(1, -48, 0, 6)
-    LTrack.Position = UDim2.new(0, 24, 0, 140)
+    LTrack.Size = UDim2.new(1, -48, 0, 4)
+    LTrack.Position = UDim2.new(0, 24, 0, 178)
     LTrack.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
     LTrack.BorderSizePixel = 0
     LTrack.ZIndex = 1001
@@ -1287,36 +1279,64 @@ local function launchNangRBXM()
     LProgress.ZIndex = 1002
     Instance.new("UICorner", LProgress).CornerRadius = UDim.new(1, 0)
 
+    local LStatus = Instance.new("TextLabel", LCard)
+    LStatus.Size = UDim2.new(1, -48, 0, 18)
+    LStatus.Position = UDim2.new(0, 24, 0, 196)
+    LStatus.BackgroundTransparency = 1
+    LStatus.Text = "Starting..."
+    LStatus.TextColor3 = PALETTE.text_muted
+    LStatus.Font = Enum.Font.Gotham
+    LStatus.TextSize = 10
+    LStatus.TextXAlignment = Enum.TextXAlignment.Center
+    LStatus.ZIndex = 1001
+
     local LFooter = Instance.new("TextLabel", LCard)
-    LFooter.Size = UDim2.new(1, -48, 0, 18)
-    LFooter.Position = UDim2.new(0, 24, 0, 166)
+    LFooter.Size = UDim2.new(1, -48, 0, 16)
+    LFooter.Position = UDim2.new(0, 24, 0, 220)
     LFooter.BackgroundTransparency = 1
     LFooter.Text = "NANG RBXM v64.1"
     LFooter.TextColor3 = PALETTE.accent_dark
     LFooter.Font = Enum.Font.Gotham
     LFooter.TextSize = 9
-    LFooter.TextXAlignment = Enum.TextXAlignment.Left
+    LFooter.TextXAlignment = Enum.TextXAlignment.Center
     LFooter.ZIndex = 1001
+
+    if LOADING_SOUND_ID ~= "rbxassetid://0" and LOADING_SOUND_ID ~= "" then
+        pcall(function() LoadingSound:Play() end)
+    end
 
     local loadingActive = true
     local loadSteps = {
-        {"Starting...", 0.18},
-        {"Loading interface...", 0.45},
-        {"Preparing Toolbox...", 0.72},
-        {"Ready", 1},
+        {"Starting...",            0.18},
+        {"Loading interface...",   0.45},
+        {"Preparing Toolbox...",   0.72},
+        {"Ready",                  1.00},
     }
 
     task.spawn(function()
         for _, step in ipairs(loadSteps) do
             if not loadingActive or not LoadingScreen.Parent then return end
             LStatus.Text = step[1]
-            TweenService:Create(LProgress, TweenInfo.new(0.32, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(step[2], 0, 1, 0)}):Play()
-            task.wait(0.34)
+            TweenService:Create(
+                LProgress,
+                TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {Size = UDim2.new(step[2], 0, 1, 0)}
+            ):Play()
+            task.wait(0.58)
         end
-        task.wait(0.35)
+
+        -- hold the completed bar + sound for a beat
+        task.wait(1.1)
         if not LoadingScreen.Parent then return end
         loadingActive = false
-        local fadeInfo = TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+        if LoadingSound.IsPlaying then
+            TweenService:Create(LoadingSound, TweenInfo.new(0.6), {Volume = 0}):Play()
+            task.wait(0.6)
+            pcall(function() LoadingSound:Stop() end)
+        end
+
+        local fadeInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
         TweenService:Create(LCard, fadeInfo, {BackgroundTransparency = 1}):Play()
         TweenService:Create(Dim, fadeInfo, {BackgroundTransparency = 1}):Play()
         TweenService:Create(LCardStroke, fadeInfo, {Transparency = 1}):Play()
@@ -1329,7 +1349,7 @@ local function launchNangRBXM()
                 TweenService:Create(obj, fadeInfo, {BackgroundTransparency = 1}):Play()
             end
         end
-        task.wait(0.32)
+        task.wait(0.42)
         if LoadingScreen.Parent then LoadingScreen:Destroy() end
     end)
 
@@ -2423,7 +2443,6 @@ end
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- MODULE 2 — NANG (Auto Farm, formerly Violence District)
--- All previously-VIP features unlocked. Same access gate as RBXM.
 -- ═══════════════════════════════════════════════════════════════════════
 local function launchNangFarm()
     local HttpService = game:GetService("HttpService")
@@ -2437,7 +2456,6 @@ local function launchNangFarm()
 
     TeleportService.TeleportInitFailed:Connect(function(arg) end)
 
-    -- Remotes — guarded, some servers may not have these
     pcall(function()
         local Remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
         if Remotes then
@@ -2467,12 +2485,8 @@ local function launchNangFarm()
     local Section = Page:CreateSection("Welcome")
     Section:AddProfile("Hello, " .. LocalPlayer.DisplayName, "Auto Farm Ready | NANG")
 
-    -- ═══════════════════════════════════════════════════════════════════
-    -- FEATURES — everything was VIP, now free. all functional.
-    -- ═══════════════════════════════════════════════════════════════════
     local Section2 = Page:CreateSection("Player Features")
 
-    -- Anti AFK
     local antiAfkConn
     local AntiAfkToggle = Section2:AddToggle("Anti AFK", false, function(state)
         if state then
@@ -2490,7 +2504,6 @@ local function launchNangFarm()
     end)
     AntiAfkToggle:AddKeyPicker()
 
-    -- NoClip
     local noclipConn
     local noclipOn = false
     local NoClipToggle = Section2:AddToggle("NoClip", false, function(state)
@@ -2511,7 +2524,6 @@ local function launchNangFarm()
     end)
     NoClipToggle:AddKeyPicker()
 
-    -- Invisible
     local invisConn
     local invisOn = false
     local function applyInvisible(on)
@@ -2541,7 +2553,6 @@ local function launchNangFarm()
     end)
     InvisToggle:AddKeyPicker()
 
-    -- Auto Execute (re-run module on respawn)
     local autoExecConn
     local AutoExecToggle = Section2:AddToggle("Auto Execute", false, function(state)
         _G.NANG_AUTO_EXEC = state
@@ -2571,9 +2582,6 @@ local function launchNangFarm()
     Section4:AddStat("Players", "0/0")
     Section4:AddStat("Ping", "0ms")
 
-    -- ═══════════════════════════════════════════════════════════════════
-    -- AUTO FARM TAB
-    -- ═══════════════════════════════════════════════════════════════════
     local Tab2 = Window:CreateTab("Auto Farm", false, false)
     local Page2 = Tab2:CreatePage("Main")
     local Section5 = Page2:CreateSection("Farm Settings")
@@ -2583,7 +2591,6 @@ local function launchNangFarm()
         if state then
             task.spawn(function()
                 while _G.NANG_SURVIVOR_FARM do
-                    -- placeholder loop; wire to the game's attack remote
                     task.wait(0.5)
                 end
             end)
@@ -2620,7 +2627,6 @@ local function launchNangFarm()
     end)
     ServerHopToggle:AddKeyPicker("H")
 
-    -- Webhook section
     local Section6 = Page2:CreateSection("Webhook")
     Section6:AddToggle("Enable Webhook", false, function(arg16, arg17) end)
     Section6:AddTextbox("Webhook URL", "https://discord.com/api/webhooks/...", function(arg18, arg19) end)
@@ -2658,9 +2664,6 @@ local function launchNangFarm()
         end
     end)
 
-    -- ═══════════════════════════════════════════════════════════════════
-    -- SETTINGS TAB
-    -- ═══════════════════════════════════════════════════════════════════
     local Tab3 = Window:CreateTab("Settings", false, false)
     local Page3 = Tab3:CreatePage("UI")
     local Section7 = Page3:CreateSection("Appearance")
@@ -2722,7 +2725,6 @@ local function buildLauncher()
         border       = Color3.fromRGB(62, 130, 62),
     }
 
-    -- Toggle button (logo)
     local Toggle = Instance.new("Frame", GUI)
     Toggle.Name = "LauncherToggle"
     Toggle.Size = UDim2.new(0, 46, 0, 46)
@@ -2764,7 +2766,6 @@ local function buildLauncher()
         end
     end)
 
-    -- Hub
     local Hub = Instance.new("Frame", GUI)
     Hub.Name = "LauncherHub"
     Hub.Size = UDim2.new(0, 340, 0, 260)
