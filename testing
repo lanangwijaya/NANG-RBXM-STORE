@@ -8,7 +8,7 @@
     ╚══════════════════════════════════════════════════════════════════════╝
 ]]
 
-local NANG_LOGO = "rbxassetid://78733153032908"
+local NANG_LOGO = "rbxthumb://type=Asset&id=135500674768121&w=420&h=420"
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SAFE EXECUTE HELPER
@@ -23,7 +23,7 @@ end
 
 
 -- ═══════════════════════════════════════════════════════════════════════
--- SHARED ACCESS GATE — whitelist OR key, unlocks every module
+-- SHARED ACCESS GATE
 -- ═══════════════════════════════════════════════════════════════════════
 local NANG_WHITELIST = {
     10370966620, 8153244285, 9218615280, 9810200508, 9451353705,
@@ -41,9 +41,7 @@ local NANG_KEY_SECRET = "NANG2024"
 _G.NANG_ACCESS = _G.NANG_ACCESS or false
 _G.NANG_ACCESS_REASON = _G.NANG_ACCESS_REASON or nil
 
-local function nangGetTimeWindow()
-    return math.floor(os.time() / 86400)
-end
+local function nangGetTimeWindow() return math.floor(os.time() / 86400) end
 
 local function nangSimpleHash(str)
     local h = 0
@@ -315,6 +313,7 @@ local function launchNangRBXM()
     local CoreGui = game:GetService("CoreGui")
     local TweenService = game:GetService("TweenService")
     local RunService = game:GetService("RunService")
+    local SoundService = game:GetService("SoundService")
 
     local LocalPlayer = Players.LocalPlayer
     local CoreDest = pcall(function() return CoreGui.Name end) and CoreGui or LocalPlayer:WaitForChild("PlayerGui")
@@ -1204,12 +1203,13 @@ local function launchNangRBXM()
     end)
 
     -- ═══════════════════════════════════════════════════════════════════
-    -- LOADING SCREEN — logo only + sound (slowed, heavier)
+    -- LOADING SCREEN — logo + sound (slowed, heavier)
+    -- Sound lives in SoundService so it doesn't die with the loading UI.
     -- ═══════════════════════════════════════════════════════════════════
     local LOADING_SOUND_ID     = "rbxassetid://132706662962034"
     local LOADING_SOUND_VOLUME = 0.85
     local LOADING_SOUND_LOOP   = true
-    local LOADING_SOUND_SPEED  = 0.8    -- <1 = slower + deeper/heavier
+    local LOADING_SOUND_SPEED  = 0.8
 
     local LoadingScreen = Instance.new("Frame", UI)
     LoadingScreen.Name = "LoadingScreen"
@@ -1224,14 +1224,6 @@ local function launchNangRBXM()
     Dim.BackgroundTransparency = 0.15
     Dim.BorderSizePixel = 0
     Dim.ZIndex = 999
-
-    local LoadingSound = Instance.new("Sound", LoadingScreen)
-    LoadingSound.Name         = "LoadingSound"
-    LoadingSound.SoundId      = LOADING_SOUND_ID
-    LoadingSound.Volume       = LOADING_SOUND_VOLUME
-    LoadingSound.Looped       = LOADING_SOUND_LOOP
-    LoadingSound.PlaybackSpeed = LOADING_SOUND_SPEED
-    LoadingSound.ZIndex       = 999
 
     local LCard = Instance.new("Frame", LoadingScreen)
     LCard.Name = "BootCard"
@@ -1301,9 +1293,20 @@ local function launchNangRBXM()
     LFooter.TextXAlignment = Enum.TextXAlignment.Center
     LFooter.ZIndex = 1001
 
-    if LOADING_SOUND_ID ~= "rbxassetid://0" and LOADING_SOUND_ID ~= "" then
-        pcall(function() LoadingSound:Play() end)
-    end
+    -- Sound goes into SoundService, survives UI destruction, no ZIndex error.
+    local LoadingSound
+    pcall(function()
+        LoadingSound = Instance.new("Sound")
+        LoadingSound.Name = "NANG_LoadingSound"
+        LoadingSound.SoundId = LOADING_SOUND_ID
+        LoadingSound.Volume = LOADING_SOUND_VOLUME
+        LoadingSound.Looped = LOADING_SOUND_LOOP
+        pcall(function() LoadingSound.PlaybackSpeed = LOADING_SOUND_SPEED end)
+        LoadingSound.Parent = SoundService
+        if LOADING_SOUND_ID ~= "rbxassetid://0" and LOADING_SOUND_ID ~= "" then
+            pcall(function() LoadingSound:Play() end)
+        end
+    end)
 
     local loadingActive = true
     local loadSteps = {
@@ -1325,15 +1328,25 @@ local function launchNangRBXM()
             task.wait(0.58)
         end
 
-        -- hold the completed bar + sound for a beat
         task.wait(1.1)
-        if not LoadingScreen.Parent then return end
+        if not LoadingScreen.Parent then
+            if LoadingSound and LoadingSound.Parent then
+                pcall(function() LoadingSound:Stop() end)
+                pcall(function() LoadingSound:Destroy() end)
+            end
+            return
+        end
         loadingActive = false
 
-        if LoadingSound.IsPlaying then
-            TweenService:Create(LoadingSound, TweenInfo.new(0.6), {Volume = 0}):Play()
+        if LoadingSound and LoadingSound.IsPlaying then
+            pcall(function()
+                TweenService:Create(LoadingSound, TweenInfo.new(0.6), {Volume = 0}):Play()
+            end)
             task.wait(0.6)
+        end
+        if LoadingSound then
             pcall(function() LoadingSound:Stop() end)
+            pcall(function() LoadingSound:Destroy() end)
         end
 
         local fadeInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
