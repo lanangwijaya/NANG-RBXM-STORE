@@ -4,10 +4,11 @@
     ║  Modules:                                                           ║
     ║    [1] NANG RBXM      (asset importer / toolbox / creator store)    ║
     ║    [2] NANG           (auto farm, formerly Violence District)       ║
+    ║  Access: whitelist OR key — unlocks BOTH modules                    ║
     ╚══════════════════════════════════════════════════════════════════════╝
 ]]
 
-local __NANG_SUITE_VERSION = "v1.0"
+local NANG_LOGO = "rbxassetid://78733153032908"
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- SAFE EXECUTE HELPER
@@ -22,7 +23,260 @@ end
 
 
 -- ═══════════════════════════════════════════════════════════════════════
--- MODULE 1 — NANG RBXM (asset importer / toolbox / creator store)
+-- SHARED ACCESS GATE — whitelist OR key, unlocks every module
+-- ═══════════════════════════════════════════════════════════════════════
+local NANG_WHITELIST = {
+    10370966620, 8153244285, 9218615280, 9810200508, 9451353705,
+    8236629801, 10825136275, 8902706566, 7355968889, 10774723762,
+    9214202918, 11191545522, 11264166178, 172732271, 9100523005,
+    9516448806, 10950645546, 11004255643, 8356649880, 10363021496,
+    8768936755, 7900111839, 9411784854, 8785695722, 10109081111,
+    7141939467, 8877803873, 11691396808, 8521600747, 9539495160,
+    8399819232, 9714755396,
+}
+
+local NANG_KEY_SITE = "https://nang-key.vercel.app"
+local NANG_KEY_SECRET = "NANG2024"
+
+-- Persisted across both modules and re-executes
+_G.NANG_ACCESS = _G.NANG_ACCESS or false
+_G.NANG_ACCESS_REASON = _G.NANG_ACCESS_REASON or nil  -- "whitelist" | "key"
+
+local function nangGetTimeWindow()
+    return math.floor(os.time() / 86400)
+end
+
+local function nangSimpleHash(str)
+    local h = 0
+    for i = 1, #str do h = (h * 31 + string.byte(str, i)) % 1000000007 end
+    return h
+end
+
+local function nangGenerateKey(userId, window)
+    local raw = NANG_KEY_SECRET .. tostring(userId) .. tostring(window)
+    local h = nangSimpleHash(raw)
+    local uid = tostring(userId)
+    local p1 = uid:sub(1, math.min(5, #uid))
+    while #p1 < 5 do p1 = p1 .. "0" end
+    local p2 = string.format("%04d", h % 10000)
+    local p3 = string.format("%04d", math.floor(h / 10000) % 10000)
+    return "NANG-" .. p1 .. "-" .. p2 .. "-" .. p3
+end
+
+local function nangValidateKey(userId, key)
+    local w = nangGetTimeWindow()
+    local input = string.upper(tostring(key)):gsub("%s+", "")
+    return (input == nangGenerateKey(userId, w))
+        or (input == nangGenerateKey(userId, w - 1))
+end
+
+local function nangIsWhitelisted(userId)
+    for _, id in ipairs(NANG_WHITELIST) do
+        if id == userId then return true end
+    end
+    return false
+end
+
+local function nangShowKeyUI(callback)
+    local Players = game:GetService("Players")
+    local CoreGui = game:GetService("CoreGui")
+    local TweenService = game:GetService("TweenService")
+    local player = Players.LocalPlayer
+    local userId = player.UserId
+    local parent = pcall(function() return CoreGui.Name end) and CoreGui or player:WaitForChild("PlayerGui")
+
+    local old = parent:FindFirstChild("NANG_KEY_GUI")
+    if old then old:Destroy() end
+
+    local keyLink = NANG_KEY_SITE .. "/?uid=" .. tostring(userId)
+
+    local KG = Instance.new("ScreenGui")
+    KG.Name = "NANG_KEY_GUI"
+    KG.ResetOnSpawn = false
+    KG.DisplayOrder = 9999
+    KG.IgnoreGuiInset = true
+    KG.Parent = parent
+
+    local OV = Instance.new("Frame", KG)
+    OV.Size = UDim2.new(1,0,1,0)
+    OV.BackgroundColor3 = Color3.fromRGB(8, 20, 8)
+    OV.BackgroundTransparency = 0.35
+    OV.BorderSizePixel = 0
+
+    local C = Instance.new("Frame", KG)
+    C.AnchorPoint = Vector2.new(0.5,0.5)
+    C.Position = UDim2.new(0.5,0,0.5,0)
+    C.Size = UDim2.new(0,400,0,380)
+    C.BackgroundColor3 = Color3.fromRGB(20, 48, 20)
+    C.BorderSizePixel = 0
+    Instance.new("UICorner", C).CornerRadius = UDim.new(0,16)
+    local CS = Instance.new("UIStroke", C)
+    CS.Color = Color3.fromRGB(62, 130, 62)
+    CS.Thickness = 1.5
+
+    local AB = Instance.new("Frame", C)
+    AB.Size = UDim2.new(1,0,0,4)
+    AB.BackgroundColor3 = Color3.fromRGB(92, 210, 92)
+    AB.BorderSizePixel = 0
+    Instance.new("UICorner", AB).CornerRadius = UDim.new(0,16)
+
+    local Logo = Instance.new("ImageLabel", C)
+    Logo.Size = UDim2.new(0, 40, 0, 40)
+    Logo.Position = UDim2.new(0, 20, 0, 18)
+    Logo.BackgroundTransparency = 1
+    Logo.Image = NANG_LOGO
+
+    local Title = Instance.new("TextLabel", C)
+    Title.Text = "NANG SUITE"
+    Title.Position = UDim2.new(0, 68, 0, 20)
+    Title.Size = UDim2.new(1, -88, 0, 24)
+    Title.BackgroundTransparency = 1
+    Title.TextColor3 = Color3.fromRGB(120, 235, 120)
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 18
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local SubTitle = Instance.new("TextLabel", C)
+    SubTitle.Text = "Buka link -> copy key -> paste di sini"
+    SubTitle.Position = UDim2.new(0, 68, 0, 42)
+    SubTitle.Size = UDim2.new(1, -88, 0, 18)
+    SubTitle.BackgroundTransparency = 1
+    SubTitle.TextColor3 = Color3.fromRGB(170, 170, 170)
+    SubTitle.Font = Enum.Font.Gotham
+    SubTitle.TextSize = 9
+    SubTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+    local LF = Instance.new("Frame", C)
+    LF.Size = UDim2.new(1,-40,0,34)
+    LF.Position = UDim2.new(0,20,0,80)
+    LF.BackgroundColor3 = Color3.fromRGB(16, 40, 16)
+    LF.BorderSizePixel = 0
+    Instance.new("UICorner", LF).CornerRadius = UDim.new(0,8)
+    local LS = Instance.new("UIStroke", LF); LS.Color = Color3.fromRGB(44, 96, 44); LS.Thickness = 1
+    local LL = Instance.new("TextLabel", LF)
+    LL.Size = UDim2.new(1,-12,1,0); LL.Position = UDim2.new(0,6,0,0)
+    LL.BackgroundTransparency = 1; LL.Text = keyLink
+    LL.TextColor3 = Color3.fromRGB(120, 235, 120); LL.Font = Enum.Font.Code
+    LL.TextSize = 8; LL.TextXAlignment = Enum.TextXAlignment.Left
+    LL.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local CLB = Instance.new("TextButton", C)
+    CLB.Size = UDim2.new(1,-40,0,32); CLB.Position = UDim2.new(0,20,0,122)
+    CLB.BackgroundColor3 = Color3.fromRGB(36, 110, 36); CLB.BorderSizePixel = 0
+    CLB.Text = "SALIN LINK"; CLB.TextColor3 = Color3.fromRGB(120, 235, 120)
+    CLB.Font = Enum.Font.GothamBold; CLB.TextSize = 11
+    Instance.new("UICorner", CLB).CornerRadius = UDim.new(0,8)
+    CLB.MouseButton1Click:Connect(function()
+        pcall(function() setclipboard(keyLink) end)
+        CLB.Text = "TERSALIN"
+        task.wait(2); CLB.Text = "SALIN LINK"
+    end)
+
+    local UidLbl = Instance.new("TextLabel", C)
+    UidLbl.Text = "UserId: " .. tostring(userId) .. " (auto-isi di link)"
+    UidLbl.Position = UDim2.new(0,20,0,162)
+    UidLbl.Size = UDim2.new(1,-40,0,18)
+    UidLbl.BackgroundTransparency = 1
+    UidLbl.TextColor3 = Color3.fromRGB(140, 140, 140)
+    UidLbl.Font = Enum.Font.Gotham
+    UidLbl.TextSize = 9
+
+    local KB = Instance.new("TextBox", C)
+    KB.Size = UDim2.new(1,-40,0,42); KB.Position = UDim2.new(0,20,0,188)
+    KB.BackgroundColor3 = Color3.fromRGB(16, 40, 16); KB.BorderSizePixel = 0
+    KB.PlaceholderText = "Paste key... (NANG-XXXXX-XXXX-XXXX)"
+    KB.Text = ""; KB.TextColor3 = Color3.fromRGB(242, 242, 242)
+    KB.PlaceholderColor3 = Color3.fromRGB(140, 140, 140)
+    KB.Font = Enum.Font.Code; KB.TextSize = 10
+    KB.TextXAlignment = Enum.TextXAlignment.Left
+    KB.ClearTextOnFocus = false
+    Instance.new("UICorner", KB).CornerRadius = UDim.new(0,8)
+    local KBS = Instance.new("UIStroke", KB); KBS.Color = Color3.fromRGB(62, 130, 62); KBS.Thickness = 1
+    local KBP = Instance.new("UIPadding", KB); KBP.PaddingLeft = UDim.new(0,10)
+
+    local SL = Instance.new("TextLabel", C)
+    SL.Text = "Key expired tiap 24 jam"
+    SL.Position = UDim2.new(0,20,0,236)
+    SL.Size = UDim2.new(1,-40,0,18)
+    SL.BackgroundTransparency = 1
+    SL.TextColor3 = Color3.fromRGB(170, 170, 170)
+    SL.Font = Enum.Font.Gotham
+    SL.TextSize = 9
+
+    local SB = Instance.new("TextButton", C)
+    SB.Size = UDim2.new(1,-40,0,40); SB.Position = UDim2.new(0,20,0,258)
+    SB.BackgroundColor3 = Color3.fromRGB(48, 140, 48); SB.BorderSizePixel = 0
+    SB.Text = "VERIFIKASI KEY"; SB.TextColor3 = Color3.new(1,1,1)
+    SB.Font = Enum.Font.GothamBold; SB.TextSize = 13
+    Instance.new("UICorner", SB).CornerRadius = UDim.new(0,10)
+
+    local Cancel = Instance.new("TextButton", C)
+    Cancel.Size = UDim2.new(1,-40,0,28); Cancel.Position = UDim2.new(0,20,0,306)
+    Cancel.BackgroundColor3 = Color3.fromRGB(26, 46, 26); Cancel.BorderSizePixel = 0
+    Cancel.Text = "BATAL"; Cancel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    Cancel.Font = Enum.Font.GothamBold; Cancel.TextSize = 10
+    Instance.new("UICorner", Cancel).CornerRadius = UDim.new(0,8)
+
+    local resolved = false
+    local function finish(ok)
+        if resolved then return end
+        resolved = true
+        KG:Destroy()
+        callback(ok)
+    end
+
+    local function tryKey()
+        local inp = tostring(KB.Text):gsub("%s+",""):upper()
+        if inp == "" then
+            SL.Text = "Key kosong"; SL.TextColor3 = Color3.fromRGB(220, 90, 90); return
+        end
+        SB.Text = "MENGECEK..."; SL.Text = "Memvalidasi..."
+        SL.TextColor3 = Color3.fromRGB(170, 170, 170)
+        task.spawn(function()
+            task.wait(0.3)
+            if nangValidateKey(userId, inp) then
+                SL.Text = "Key valid!"; SL.TextColor3 = Color3.fromRGB(120, 235, 120)
+                SB.Text = "BERHASIL"
+                task.wait(0.4)
+                finish(true)
+            else
+                SL.Text = "Key salah/expired."; SL.TextColor3 = Color3.fromRGB(220, 90, 90)
+                SB.Text = "VERIFIKASI KEY"
+                TweenService:Create(C, TweenInfo.new(0.05), {Position = UDim2.new(0.5,7,0.5,0)}):Play()
+                task.wait(0.1)
+                TweenService:Create(C, TweenInfo.new(0.05), {Position = UDim2.new(0.5,0,0.5,0)}):Play()
+            end
+        end)
+    end
+
+    SB.MouseButton1Click:Connect(tryKey)
+    KB.FocusLost:Connect(function(e) if e then tryKey() end end)
+    Cancel.MouseButton1Click:Connect(function() finish(false) end)
+end
+
+local function nangRequireAccess(onGranted)
+    if _G.NANG_ACCESS then onGranted(); return end
+
+    local userId = game:GetService("Players").LocalPlayer.UserId
+    if nangIsWhitelisted(userId) then
+        _G.NANG_ACCESS = true
+        _G.NANG_ACCESS_REASON = "whitelist"
+        onGranted()
+        return
+    end
+
+    nangShowKeyUI(function(ok)
+        if ok then
+            _G.NANG_ACCESS = true
+            _G.NANG_ACCESS_REASON = "key"
+            onGranted()
+        end
+    end)
+end
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- MODULE 1 — NANG RBXM
 -- ═══════════════════════════════════════════════════════════════════════
 local function launchNangRBXM()
     local __NANG_MAIN_OK = false
@@ -53,184 +307,6 @@ local function launchNangRBXM()
         danger         = Color3.fromRGB(220, 90, 90),
         warning        = Color3.fromRGB(235, 190, 80),
     }
-
-    local _WHITELIST = {
-        10370966620, 8153244285, 9218615280, 9810200508, 9451353705,
-        8236629801, 10825136275, 8902706566, 7355968889, 10774723762,
-        9214202918, 11191545522, 11264166178, 172732271, 9100523005,
-        9516448806, 10950645546, 11004255643, 8356649880, 10363021496,
-        8768936755, 7900111839, 9411784854, 8785695722, 10109081111,
-        7141939467, 8877803873, 11691396808, 8521600747, 9539495160,
-        8399819232, 9714755396,
-    }
-
-    local _player = game:GetService("Players").LocalPlayer
-    local _userId = _player.UserId
-    local _isVIP = false
-
-    for _, id in ipairs(_WHITELIST) do
-        if id == _userId then _isVIP = true; break end
-    end
-
-    local KEY_SITE = "https://nang-key.vercel.app"
-    local KEY_SECRET = "NANG2024"
-
-    local function getTimeWindow() return math.floor(os.time() / 86400) end
-
-    local function simpleHash(str)
-        local h = 0
-        for i = 1, #str do h = (h * 31 + string.byte(str, i)) % 1000000007 end
-        return h
-    end
-
-    local function generateKeyLocal(userId, window)
-        local raw = KEY_SECRET .. tostring(userId) .. tostring(window)
-        local h = simpleHash(raw)
-        local uid = tostring(userId)
-        local part1 = uid:sub(1, math.min(5, #uid))
-        while #part1 < 5 do part1 = part1 .. "0" end
-        local part2 = string.format("%04d", h % 10000)
-        local part3 = string.format("%04d", math.floor(h / 10000) % 10000)
-        return "NANG-" .. part1 .. "-" .. part2 .. "-" .. part3
-    end
-
-    local function validateKeyOnline(userId, key, callback)
-        local w = getTimeWindow()
-        local input = string.upper(tostring(key)):gsub("%s+","")
-        local valid = (input == generateKeyLocal(userId, w)) or (input == generateKeyLocal(userId, w - 1))
-        callback(valid)
-    end
-
-    if not _isVIP then
-        local _keyLink = KEY_SITE .. "/?uid=" .. tostring(_userId)
-        local TS = game:GetService("TweenService")
-        local CG = game:GetService("CoreGui")
-        local KG = Instance.new("ScreenGui")
-        KG.Name = "NANG_KEY_GUI"
-        KG.ResetOnSpawn = false
-        KG.DisplayOrder = 9999
-        KG.IgnoreGuiInset = true
-        pcall(function() KG.Parent = CG end)
-        if not KG.Parent then KG.Parent = _player:WaitForChild("PlayerGui") end
-
-        local OV = Instance.new("Frame", KG)
-        OV.Size = UDim2.new(1,0,1,0)
-        OV.BackgroundColor3 = Color3.fromRGB(8, 20, 8)
-        OV.BackgroundTransparency = 0.35
-        OV.BorderSizePixel = 0
-
-        local C = Instance.new("Frame", KG)
-        C.AnchorPoint = Vector2.new(0.5,0.5)
-        C.Position = UDim2.new(0.5,0,0.5,0)
-        C.Size = UDim2.new(0,400,0,340)
-        C.BackgroundColor3 = PALETTE.bg_panel
-        C.BorderSizePixel = 0
-        Instance.new("UICorner", C).CornerRadius = UDim.new(0,16)
-        local CS = Instance.new("UIStroke", C)
-        CS.Color = PALETTE.border
-        CS.Thickness = 1.5
-
-        local AB = Instance.new("Frame", C)
-        AB.Size = UDim2.new(1,0,0,4)
-        AB.BackgroundColor3 = PALETTE.accent
-        AB.BorderSizePixel = 0
-        Instance.new("UICorner", AB).CornerRadius = UDim.new(0,16)
-
-        local function lbl(txt, pos, size, fs, col)
-            local l = Instance.new("TextLabel", C)
-            l.Text = txt; l.Position = pos; l.Size = size
-            l.BackgroundTransparency = 1
-            l.TextColor3 = col or PALETTE.accent
-            l.Font = Enum.Font.GothamBold; l.TextSize = fs
-            l.TextXAlignment = Enum.TextXAlignment.Center
-            l.TextWrapped = true
-            return l
-        end
-
-        lbl("NANG RBXM", UDim2.new(0,20,0,16), UDim2.new(1,-40,0,32), 22, PALETTE.accent)
-        lbl("Buka link -> masukkan UserId -> copy key -> paste di sini", UDim2.new(0,20,0,52), UDim2.new(1,-40,0,30), 9, PALETTE.text_muted)
-
-        local LF = Instance.new("Frame", C)
-        LF.Size = UDim2.new(1,-40,0,34)
-        LF.Position = UDim2.new(0,20,0,90)
-        LF.BackgroundColor3 = PALETTE.bg_input
-        LF.BorderSizePixel = 0
-        Instance.new("UICorner", LF).CornerRadius = UDim.new(0,8)
-        local LS = Instance.new("UIStroke", LF); LS.Color = PALETTE.border_soft; LS.Thickness = 1
-        local LL = Instance.new("TextLabel", LF)
-        LL.Size = UDim2.new(1,-12,1,0); LL.Position = UDim2.new(0,6,0,0)
-        LL.BackgroundTransparency = 1; LL.Text = _keyLink
-        LL.TextColor3 = PALETTE.accent_hover; LL.Font = Enum.Font.Code
-        LL.TextSize = 8; LL.TextXAlignment = Enum.TextXAlignment.Left
-        LL.TextTruncate = Enum.TextTruncate.AtEnd
-
-        local CLB = Instance.new("TextButton", C)
-        CLB.Size = UDim2.new(1,-40,0,32); CLB.Position = UDim2.new(0,20,0,132)
-        CLB.BackgroundColor3 = PALETTE.accent_press; CLB.BorderSizePixel = 0
-        CLB.Text = "SALIN LINK"; CLB.TextColor3 = PALETTE.accent_hover
-        CLB.Font = Enum.Font.GothamBold; CLB.TextSize = 11
-        Instance.new("UICorner", CLB).CornerRadius = UDim.new(0,8)
-        CLB.MouseButton1Click:Connect(function()
-            pcall(function() setclipboard(_keyLink) end)
-            CLB.Text = "TERSALIN"
-            task.wait(2); CLB.Text = "SALIN LINK"
-        end)
-
-        lbl("UserId: " .. tostring(_userId) .. " (auto-isi di link)", UDim2.new(0,20,0,172), UDim2.new(1,-40,0,20), 9, PALETTE.text_dim)
-
-        local KB = Instance.new("TextBox", C)
-        KB.Size = UDim2.new(1,-40,0,42); KB.Position = UDim2.new(0,20,0,198)
-        KB.BackgroundColor3 = PALETTE.bg_input; KB.BorderSizePixel = 0
-        KB.PlaceholderText = "Paste key... (NANG-XXXXX-XXXX-XXXX)"
-        KB.Text = ""; KB.TextColor3 = PALETTE.text_primary
-        KB.PlaceholderColor3 = PALETTE.text_dim
-        KB.Font = Enum.Font.Code; KB.TextSize = 10
-        KB.TextXAlignment = Enum.TextXAlignment.Left
-        KB.ClearTextOnFocus = false
-        Instance.new("UICorner", KB).CornerRadius = UDim.new(0,8)
-        local KBS = Instance.new("UIStroke", KB); KBS.Color = PALETTE.border; KBS.Thickness = 1
-        local KBP = Instance.new("UIPadding", KB); KBP.PaddingLeft = UDim.new(0,10)
-
-        local SL = lbl("Key expired tiap 24 jam", UDim2.new(0,20,0,246), UDim2.new(1,-40,0,18), 9, PALETTE.text_dim)
-
-        local SB = Instance.new("TextButton", C)
-        SB.Size = UDim2.new(1,-40,0,40); SB.Position = UDim2.new(0,20,0,268)
-        SB.BackgroundColor3 = PALETTE.accent_dark; SB.BorderSizePixel = 0
-        SB.Text = "VERIFIKASI KEY"; SB.TextColor3 = Color3.new(1,1,1)
-        SB.Font = Enum.Font.GothamBold; SB.TextSize = 13
-        Instance.new("UICorner", SB).CornerRadius = UDim.new(0,10)
-
-        local _done = false
-        local function tryKey()
-            local inp = tostring(KB.Text):gsub("%s+",""):upper()
-            if inp == "" then
-                SL.Text = "Key kosong"; SL.TextColor3 = PALETTE.danger; return
-            end
-            SB.Text = "MENGECEK..."; SL.Text = "Memvalidasi..."
-            SL.TextColor3 = PALETTE.text_muted
-            validateKeyOnline(_userId, inp, function(valid)
-                if valid then
-                    SL.Text = "Key valid!"; SL.TextColor3 = PALETTE.accent_hover
-                    SB.Text = "BERHASIL"
-                    task.wait(0.5)
-                    KG:Destroy()
-                    _isVIP = true
-                    _done = true
-                else
-                    SL.Text = "Key salah/expired."; SL.TextColor3 = PALETTE.danger
-                    SB.Text = "VERIFIKASI KEY"
-                    TS:Create(C, TweenInfo.new(0.05), {Position = UDim2.new(0.5,7,0.5,0)}):Play()
-                    task.wait(0.1)
-                    TS:Create(C, TweenInfo.new(0.05), {Position = UDim2.new(0.5,0,0.5,0)}):Play()
-                end
-            end)
-        end
-
-        SB.MouseButton1Click:Connect(tryKey)
-        KB.FocusLost:Connect(function(e) if e then tryKey() end end)
-
-        repeat task.wait(0.2) until _done
-    end
 
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1146,7 +1222,7 @@ local function launchNangRBXM()
     LCard.Name = "BootCard"
     LCard.AnchorPoint = Vector2.new(0.5, 0.5)
     LCard.Position = UDim2.new(0.5, 0, 0.5, 0)
-    LCard.Size = UDim2.new(0, 360, 0, 190)
+    LCard.Size = UDim2.new(0, 360, 0, 220)
     LCard.BackgroundColor3 = PALETTE.bg_panel
     LCard.BorderSizePixel = 0
     LCard.ZIndex = 1000
@@ -1156,28 +1232,27 @@ local function launchNangRBXM()
     LCardStroke.Transparency = 0.15
     LCardStroke.Color = PALETTE.accent
 
-    local LAccent = Instance.new("Frame", LCard)
-    LAccent.Size = UDim2.new(0, 4, 1, -28)
-    LAccent.Position = UDim2.new(0, 0, 0, 14)
-    LAccent.BackgroundColor3 = PALETTE.accent
-    LAccent.BorderSizePixel = 0
-    LAccent.ZIndex = 1001
-    Instance.new("UICorner", LAccent).CornerRadius = UDim.new(1, 0)
+    local LLogo = Instance.new("ImageLabel", LCard)
+    LLogo.Size = UDim2.new(0, 44, 0, 44)
+    LLogo.Position = UDim2.new(0, 24, 0, 22)
+    LLogo.BackgroundTransparency = 1
+    LLogo.Image = NANG_LOGO
+    LLogo.ZIndex = 1001
 
     local LBrand = Instance.new("TextLabel", LCard)
-    LBrand.Size = UDim2.new(1, -48, 0, 36)
-    LBrand.Position = UDim2.new(0, 24, 0, 22)
+    LBrand.Size = UDim2.new(1, -100, 0, 36)
+    LBrand.Position = UDim2.new(0, 78, 0, 26)
     LBrand.BackgroundTransparency = 1
     LBrand.Text = "NANG RBXM"
     LBrand.TextColor3 = PALETTE.accent_hover
     LBrand.Font = Enum.Font.GothamBold
-    LBrand.TextSize = 25
+    LBrand.TextSize = 22
     LBrand.TextXAlignment = Enum.TextXAlignment.Left
     LBrand.ZIndex = 1001
 
     local LSub = Instance.new("TextLabel", LCard)
     LSub.Size = UDim2.new(1, -48, 0, 20)
-    LSub.Position = UDim2.new(0, 24, 0, 58)
+    LSub.Position = UDim2.new(0, 24, 0, 76)
     LSub.BackgroundTransparency = 1
     LSub.Text = "Preparing your workspace"
     LSub.TextColor3 = PALETTE.text_muted
@@ -1188,7 +1263,7 @@ local function launchNangRBXM()
 
     local LStatus = Instance.new("TextLabel", LCard)
     LStatus.Size = UDim2.new(1, -48, 0, 18)
-    LStatus.Position = UDim2.new(0, 24, 0, 96)
+    LStatus.Position = UDim2.new(0, 24, 0, 110)
     LStatus.BackgroundTransparency = 1
     LStatus.Text = "Starting..."
     LStatus.TextColor3 = PALETTE.text_primary
@@ -1199,7 +1274,7 @@ local function launchNangRBXM()
 
     local LTrack = Instance.new("Frame", LCard)
     LTrack.Size = UDim2.new(1, -48, 0, 6)
-    LTrack.Position = UDim2.new(0, 24, 0, 123)
+    LTrack.Position = UDim2.new(0, 24, 0, 140)
     LTrack.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
     LTrack.BorderSizePixel = 0
     LTrack.ZIndex = 1001
@@ -1214,7 +1289,7 @@ local function launchNangRBXM()
 
     local LFooter = Instance.new("TextLabel", LCard)
     LFooter.Size = UDim2.new(1, -48, 0, 18)
-    LFooter.Position = UDim2.new(0, 24, 0, 146)
+    LFooter.Position = UDim2.new(0, 24, 0, 166)
     LFooter.BackgroundTransparency = 1
     LFooter.Text = "NANG RBXM v64.1"
     LFooter.TextColor3 = PALETTE.accent_dark
@@ -1248,6 +1323,8 @@ local function launchNangRBXM()
         for _, obj in ipairs(LCard:GetDescendants()) do
             if obj:IsA("TextLabel") then
                 TweenService:Create(obj, fadeInfo, {TextTransparency = 1}):Play()
+            elseif obj:IsA("ImageLabel") then
+                TweenService:Create(obj, fadeInfo, {ImageTransparency = 1}):Play()
             elseif obj:IsA("Frame") and obj ~= LCard then
                 TweenService:Create(obj, fadeInfo, {BackgroundTransparency = 1}):Play()
             end
@@ -1273,11 +1350,10 @@ local function launchNangRBXM()
     ToggleStroke.Transparency = 0.1
 
     local ToggleIcon = Instance.new("ImageLabel", ToggleFrame)
-    ToggleIcon.Size = UDim2.new(0, 22, 0, 22)
-    ToggleIcon.Position = UDim2.new(0.5, -11, 0.5, -11)
+    ToggleIcon.Size = UDim2.new(0, 30, 0, 30)
+    ToggleIcon.Position = UDim2.new(0.5, -15, 0.5, -15)
     ToggleIcon.BackgroundTransparency = 1
-    ToggleIcon.Image = ICONS.CHEVRON_RIGHT
-    ToggleIcon.ImageColor3 = PALETTE.text_primary
+    ToggleIcon.Image = NANG_LOGO
 
     local ToggleBtn = Instance.new("TextButton", ToggleFrame)
     ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
@@ -1332,9 +1408,15 @@ local function launchNangRBXM()
     local HeaderStroke = Instance.new("UIStroke", Header)
     HeaderStroke.Color = PALETTE.border_soft
 
+    local HeaderLogo = Instance.new("ImageLabel", Header)
+    HeaderLogo.Size = UDim2.new(0, 34, 0, 34)
+    HeaderLogo.Position = UDim2.new(0, 14, 0, 15)
+    HeaderLogo.BackgroundTransparency = 1
+    HeaderLogo.Image = NANG_LOGO
+
     local Brand = Instance.new("TextLabel", Header)
     Brand.Size = UDim2.new(0, 220, 0, 28)
-    Brand.Position = UDim2.new(0, 22, 0, 12)
+    Brand.Position = UDim2.new(0, 52, 0, 12)
     Brand.BackgroundTransparency = 1
     Brand.Text = "NANG"
     Brand.TextColor3 = PALETTE.text_primary
@@ -1344,7 +1426,7 @@ local function launchNangRBXM()
 
     local Brand2 = Instance.new("TextLabel", Header)
     Brand2.Size = UDim2.new(0, 180, 0, 28)
-    Brand2.Position = UDim2.new(0, 78, 0, 12)
+    Brand2.Position = UDim2.new(0, 108, 0, 12)
     Brand2.BackgroundTransparency = 1
     Brand2.Text = "RBXM"
     Brand2.TextColor3 = PALETTE.accent_hover
@@ -1354,7 +1436,7 @@ local function launchNangRBXM()
 
     local Version = Instance.new("TextLabel", Header)
     Version.Size = UDim2.new(0, 52, 0, 20)
-    Version.Position = UDim2.new(0, 138, 0, 17)
+    Version.Position = UDim2.new(0, 168, 0, 17)
     Version.BackgroundColor3 = PALETTE.accent_bg
     Version.Text = "v64.1"
     Version.TextColor3 = PALETTE.accent_hover
@@ -1364,7 +1446,7 @@ local function launchNangRBXM()
 
     local CreatorInfo = Instance.new("TextLabel", Header)
     CreatorInfo.Size = UDim2.new(0, 300, 0, 48)
-    CreatorInfo.Position = UDim2.new(0, 210, 0, 8)
+    CreatorInfo.Position = UDim2.new(0, 230, 0, 8)
     CreatorInfo.BackgroundColor3 = PALETTE.bg_panel_alt
     CreatorInfo.BackgroundTransparency = 0
     CreatorInfo.Text = "MADE BY: NANG   |   ROBLOX ID: 8236629801\nBUY SCRIPT: 081252425581"
@@ -1381,14 +1463,13 @@ local function launchNangRBXM()
 
     local TitleIcon = Instance.new("ImageLabel", Header)
     TitleIcon.Size = UDim2.new(0, 24, 0, 24)
-    TitleIcon.Position = UDim2.new(0, 528, 0, 20)
+    TitleIcon.Position = UDim2.new(0, 548, 0, 20)
     TitleIcon.BackgroundTransparency = 1
-    TitleIcon.Image = ICONS.PACKAGE
-    TitleIcon.ImageColor3 = PALETTE.accent
+    TitleIcon.Image = NANG_LOGO
 
     local TitleText = Instance.new("TextLabel", Header)
     TitleText.Size = UDim2.new(0, 180, 0, 24)
-    TitleText.Position = UDim2.new(0, 558, 0, 8)
+    TitleText.Position = UDim2.new(0, 578, 0, 8)
     TitleText.BackgroundTransparency = 1
     TitleText.Text = "TOOLBOX"
     TitleText.TextColor3 = PALETTE.text_primary
@@ -1398,7 +1479,7 @@ local function launchNangRBXM()
 
     local Subtitle = Instance.new("TextLabel", Header)
     Subtitle.Size = UDim2.new(0, 200, 0, 16)
-    Subtitle.Position = UDim2.new(0, 558, 0, 34)
+    Subtitle.Position = UDim2.new(0, 578, 0, 34)
     Subtitle.BackgroundTransparency = 1
     Subtitle.Text = "Cari & import asset"
     Subtitle.TextColor3 = PALETTE.text_muted
@@ -1446,7 +1527,6 @@ local function launchNangRBXM()
 
     local function toggleMain()
         Main.Visible = not Main.Visible
-        ToggleIcon.Image = Main.Visible and ICONS.CHEVRON_RIGHT or ICONS.CHEVRON_LEFT
     end
     ToggleBtn.MouseButton1Click:Connect(toggleMain)
 
@@ -1458,9 +1538,6 @@ local function launchNangRBXM()
 
     local function getWhitelistGreeting()
         local playerName = tostring(LocalPlayer.DisplayName or LocalPlayer.Name or "Nang")
-        local WHITELIST_NAMES = {}
-        local customName = WHITELIST_NAMES[LocalPlayer.UserId]
-        if customName and customName ~= "" then playerName = customName end
         return "Hello,\n" .. playerName
     end
 
@@ -1518,7 +1595,8 @@ local function launchNangRBXM()
     StatusLabel.Size = UDim2.new(1, -18, 1, -12)
     StatusLabel.Position = UDim2.new(0, 9, 0, 6)
     StatusLabel.BackgroundTransparency = 1
-    StatusLabel.Text = "STATUS\nAccess: " .. (_isVIP and "VIP" or "FREE") .. "\nReady"
+    local reasonText = _G.NANG_ACCESS_REASON == "whitelist" and "VIP" or "KEY"
+    StatusLabel.Text = "STATUS\nAccess: " .. reasonText .. "\nReady"
     StatusLabel.TextColor3 = PALETTE.accent_hover
     StatusLabel.Font = Enum.Font.GothamBold
     StatusLabel.TextSize = 9
@@ -2345,6 +2423,7 @@ end
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- MODULE 2 — NANG (Auto Farm, formerly Violence District)
+-- All previously-VIP features unlocked. Same access gate as RBXM.
 -- ═══════════════════════════════════════════════════════════════════════
 local function launchNangFarm()
     local HttpService = game:GetService("HttpService")
@@ -2353,46 +2432,131 @@ local function launchNangFarm()
     local Players = game:GetService("Players")
     local TeleportService = game:GetService("TeleportService")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local RunService = game:GetService("RunService")
     local VirtualUser = game:GetService("VirtualUser")
+
     TeleportService.TeleportInitFailed:Connect(function(arg) end)
-    local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-    local StatusUpdateEvent = Remotes:WaitForChild("StatusUpdateEvent")
-    local TimeUpdateEvent = Remotes:WaitForChild("TimeUpdateEvent")
-    StatusUpdateEvent.OnClientEvent:Connect(function(arg2) end)
-    TimeUpdateEvent.OnClientEvent:Connect(function(arg3) end)
+
+    -- Remotes — guarded, some servers may not have these
+    pcall(function()
+        local Remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
+        if Remotes then
+            local StatusUpdateEvent = Remotes:FindFirstChild("StatusUpdateEvent")
+            local TimeUpdateEvent = Remotes:FindFirstChild("TimeUpdateEvent")
+            if StatusUpdateEvent then StatusUpdateEvent.OnClientEvent:Connect(function(arg2) end) end
+            if TimeUpdateEvent then TimeUpdateEvent.OnClientEvent:Connect(function(arg3) end) end
+        end
+    end)
+
+    local LocalPlayer = Players.LocalPlayer
 
     local Window = result:CreateWindow({
         Title = "NANG",
-        Logo = "rbxassetid://118755181202304",
+        Logo = NANG_LOGO,
         LogoSize = 32,
         SphereIconSize = 38,
-        SphereImage = "rbxassetid://118755181202304",
+        SphereImage = NANG_LOGO,
         SphereText = false,
         SphereWords = "NANG",
-        Subtitle = "Violence District (FREE)",
+        Subtitle = "Violence District",
         SubtitleColor = Color3.fromRGB(190, 140, 255)
     })
 
     local Tab = Window:CreateTab("Dashboard", true, false)
     local Page = Tab:CreatePage("Overview")
     local Section = Page:CreateSection("Welcome")
-    Section:AddProfile("Hello, " .. Players.LocalPlayer.DisplayName, "Auto Farm Ready | NANG")
+    Section:AddProfile("Hello, " .. LocalPlayer.DisplayName, "Auto Farm Ready | NANG")
 
-    local Section2 = Page:CreateSection("Premium Features")
-    local Toggle = Section2:AddToggle("Anti AFK", false, function(arg4, arg5)
-        print("Anti AFK is premium only")
-    end, { LockText = "Premium Only", Locked = true })
-    Toggle:AddKeyPicker()
+    -- ═══════════════════════════════════════════════════════════════════
+    -- FEATURES — everything was VIP, now free. all functional.
+    -- ═══════════════════════════════════════════════════════════════════
+    local Section2 = Page:CreateSection("Player Features")
 
-    local Toggle2 = Section2:AddToggle("NoClip", false, function(arg6, arg7)
-        print("NoClip is premium only")
-    end, { LockText = "Premium Only", Locked = true })
-    Toggle2:AddKeyPicker()
+    -- Anti AFK
+    local antiAfkConn
+    local AntiAfkToggle = Section2:AddToggle("Anti AFK", false, function(state)
+        if state then
+            if not antiAfkConn then
+                antiAfkConn = LocalPlayer.Idled:Connect(function()
+                    pcall(function()
+                        VirtualUser:CaptureController()
+                        VirtualUser:ClickButton2(Vector2.new())
+                    end)
+                end)
+            end
+        else
+            if antiAfkConn then antiAfkConn:Disconnect(); antiAfkConn = nil end
+        end
+    end)
+    AntiAfkToggle:AddKeyPicker()
 
-    local Toggle3 = Section2:AddToggle("Invisible", false, function(arg8, arg9)
-        print("Invisible is premium only")
-    end, { LockText = "Premium Only", Locked = true })
-    Toggle3:AddKeyPicker()
+    -- NoClip
+    local noclipConn
+    local noclipOn = false
+    local NoClipToggle = Section2:AddToggle("NoClip", false, function(state)
+        noclipOn = state
+        if state and not noclipConn then
+            noclipConn = RunService.Stepped:Connect(function()
+                if noclipOn and LocalPlayer.Character then
+                    for _, p in ipairs(LocalPlayer.Character:GetDescendants()) do
+                        if p:IsA("BasePart") and p.CanCollide then
+                            pcall(function() p.CanCollide = false end)
+                        end
+                    end
+                end
+            end)
+        elseif not state and noclipConn then
+            noclipConn:Disconnect(); noclipConn = nil
+        end
+    end)
+    NoClipToggle:AddKeyPicker()
+
+    -- Invisible
+    local invisConn
+    local invisOn = false
+    local function applyInvisible(on)
+        local char = LocalPlayer.Character
+        if not char then return end
+        for _, p in ipairs(char:GetDescendants()) do
+            pcall(function()
+                if p:IsA("BasePart") then
+                    p.LocalTransparencyModifier = on and 1 or 0
+                elseif p:IsA("Decal") then
+                    p.Transparency = on and 1 or 0
+                end
+            end)
+        end
+    end
+    local InvisToggle = Section2:AddToggle("Invisible", false, function(state)
+        invisOn = state
+        applyInvisible(state)
+        if state and not invisConn then
+            invisConn = RunService.RenderStepped:Connect(function()
+                if invisOn then applyInvisible(true) end
+            end)
+        elseif not state and invisConn then
+            invisConn:Disconnect(); invisConn = nil
+            applyInvisible(false)
+        end
+    end)
+    InvisToggle:AddKeyPicker()
+
+    -- Auto Execute (re-run module on respawn)
+    local autoExecConn
+    local AutoExecToggle = Section2:AddToggle("Auto Execute", false, function(state)
+        _G.NANG_AUTO_EXEC = state
+        if state and not autoExecConn then
+            autoExecConn = LocalPlayer.CharacterAdded:Connect(function()
+                if _G.NANG_AUTO_EXEC then
+                    task.wait(1)
+                    nangSafe("Auto Execute", launchNangFarm)
+                end
+            end)
+        elseif not state and autoExecConn then
+            autoExecConn:Disconnect(); autoExecConn = nil
+        end
+    end)
+    AutoExecToggle:AddKeyPicker()
 
     local Section3 = Page:CreateSection("Attributes")
     Section3:AddStat("Level", "0")
@@ -2407,53 +2571,96 @@ local function launchNangFarm()
     Section4:AddStat("Players", "0/0")
     Section4:AddStat("Ping", "0ms")
 
+    -- ═══════════════════════════════════════════════════════════════════
+    -- AUTO FARM TAB
+    -- ═══════════════════════════════════════════════════════════════════
     local Tab2 = Window:CreateTab("Auto Farm", false, false)
     local Page2 = Tab2:CreatePage("Main")
     local Section5 = Page2:CreateSection("Farm Settings")
 
-    local Toggle4 = Section5:AddToggle("Survivor Farm", false, function(arg10, arg11) end)
-    Toggle4:AddKeyPicker("F")
-
-    local Toggle5 = Section5:AddToggle("Server Hop", false, function(arg12, arg13)
-        task.spawn(function(...)
-            task.wait(0.5)
-            task.wait(0.5)
-        end)
+    local SurvivorToggle = Section5:AddToggle("Survivor Farm", false, function(state)
+        _G.NANG_SURVIVOR_FARM = state
+        if state then
+            task.spawn(function()
+                while _G.NANG_SURVIVOR_FARM do
+                    -- placeholder loop; wire to the game's attack remote
+                    task.wait(0.5)
+                end
+            end)
+        end
     end)
-    Toggle5:AddKeyPicker("H")
+    SurvivorToggle:AddKeyPicker("F")
 
-    Section5:AddToggle("Auto Execute", false, function(arg14, arg15)
-        print("Auto Execute is premium only")
-    end, { LockText = "Premium Only", Locked = true })
+    local hopConn
+    local ServerHopToggle = Section5:AddToggle("Server Hop", false, function(state)
+        if state then
+            if not hopConn then
+                task.spawn(function()
+                    task.wait(0.5)
+                    local Teleport = game:GetService("TeleportService")
+                    local Http = game:GetService("HttpService")
+                    local placeId = game.PlaceId
+                    local ok, servers = pcall(function()
+                        local body = game:HttpGet("https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100")
+                        return Http:JSONDecode(body)
+                    end)
+                    if ok and servers and servers.data then
+                        for _, srv in ipairs(servers.data) do
+                            if srv.id ~= game.JobId and srv.playing < srv.maxPlayers then
+                                pcall(function() Teleport:TeleportToPlaceInstance(placeId, srv.id, LocalPlayer) end)
+                                return
+                            end
+                        end
+                    end
+                end)
+            end
+        else
+            if hopConn then hopConn:Disconnect(); hopConn = nil end
+        end
+    end)
+    ServerHopToggle:AddKeyPicker("H")
 
+    -- Webhook section
     local Section6 = Page2:CreateSection("Webhook")
     Section6:AddToggle("Enable Webhook", false, function(arg16, arg17) end)
     Section6:AddTextbox("Webhook URL", "https://discord.com/api/webhooks/...", function(arg18, arg19) end)
     Section6:AddButton("Test Webhook", function(arg20, arg21)
-        local attributes = Players.LocalPlayer:GetAttributes()
+        local attributes = LocalPlayer:GetAttributes()
         local json = HttpService:JSONEncode({
             embeds = {
                 {
                     color = 3638942,
                     description = "Test from NANG",
                     fields = {
-                        { inline = false, name = "SIN", value = string.format("%s (**%+d**)", tonumber(attributes.KillerChance), (tonumber(tonumber(attributes.KillerChance)) - tonumber(tonumber(attributes.KillerChance)))) },
-                        { inline = false, name = "EXP", value = string.format("%s (**%+d**)", tonumber(attributes.EXP), (tonumber(tonumber(attributes.EXP)) - tonumber(tonumber(attributes.EXP)))) },
-                        { inline = false, name = "Screws", value = string.format("%s (**%+d**)", tonumber(attributes.Screws), (tonumber(tonumber(attributes.Screws)) - tonumber(tonumber(attributes.Screws)))) },
-                        { inline = false, name = "Gears", value = string.format("%s (**%+d**)", tonumber(attributes.Gears), (tonumber(tonumber(attributes.Gears)) - tonumber(tonumber(attributes.Gears)))) },
+                        { inline = false, name = "SIN", value = string.format("%s (**%+d**)", tonumber(attributes.KillerChance) or 0, 0) },
+                        { inline = false, name = "EXP", value = string.format("%s (**%+d**)", tonumber(attributes.EXP) or 0, 0) },
+                        { inline = false, name = "Screws", value = string.format("%s (**%+d**)", tonumber(attributes.Screws) or 0, 0) },
+                        { inline = false, name = "Gears", value = string.format("%s (**%+d**)", tonumber(attributes.Gears) or 0, 0) },
                         { inline = false, name = "Server ID", value = string.format("```\n%s\n```", game.JobId) }
                     },
-                    footer = { text = "NANG · Wave" },
-                    timestamp = "2026-10-01T11:49:58.000Z",
+                    footer = { text = "NANG" },
                     title = "Webhook Test",
                     url = "https://www.roblox.com/users/0/profile"
                 }
             }
         })
-        local result2 = syn.request({ Body = json, Headers = { ["Content-Type"] = "application/json" }, Method = "POST", Url = arg18 })
-        result:Notify({ Title = "Webhook Failed", Description = "Status: " .. tostring(result2.StatusCode), Duration = 5 })
+        local requestFn = (syn and syn.request) or request or http_request
+        if requestFn then
+            local ok, res = pcall(requestFn, {
+                Body = json,
+                Headers = { ["Content-Type"] = "application/json" },
+                Method = "POST",
+                Url = arg18
+            })
+            if ok and res then
+                result:Notify({ Title = "Webhook Status", Description = "Status: " .. tostring(res.StatusCode), Duration = 5 })
+            end
+        end
     end)
 
+    -- ═══════════════════════════════════════════════════════════════════
+    -- SETTINGS TAB
+    -- ═══════════════════════════════════════════════════════════════════
     local Tab3 = Window:CreateTab("Settings", false, false)
     local Page3 = Tab3:CreatePage("UI")
     local Section7 = Page3:CreateSection("Appearance")
@@ -2477,12 +2684,12 @@ local function launchNangFarm()
     end)
 
     print("[NANG] Loaded Successfully!")
-    print("[NANG] Premium features are locked. Upgrade to VIP to unlock.")
+    print("[NANG] All features unlocked via shared access gate.")
 end
 
 
 -- ═══════════════════════════════════════════════════════════════════════
--- LAUNCHER UI — floating hub with two module buttons
+-- LAUNCHER UI
 -- ═══════════════════════════════════════════════════════════════════════
 local function buildLauncher()
     local Players = game:GetService("Players")
@@ -2515,7 +2722,7 @@ local function buildLauncher()
         border       = Color3.fromRGB(62, 130, 62),
     }
 
-    -- Floating toggle button (small circular icon under Roblox menu)
+    -- Toggle button (logo)
     local Toggle = Instance.new("Frame", GUI)
     Toggle.Name = "LauncherToggle"
     Toggle.Size = UDim2.new(0, 46, 0, 46)
@@ -2528,20 +2735,17 @@ local function buildLauncher()
     TStroke.Color = P.accent
     TStroke.Thickness = 1.6
 
-    local TLabel = Instance.new("TextLabel", Toggle)
-    TLabel.Size = UDim2.new(1, 0, 1, 0)
-    TLabel.BackgroundTransparency = 1
-    TLabel.Text = "N"
-    TLabel.TextColor3 = P.accent_hover
-    TLabel.Font = Enum.Font.GothamBold
-    TLabel.TextSize = 20
+    local TLogo = Instance.new("ImageLabel", Toggle)
+    TLogo.Size = UDim2.new(0, 38, 0, 38)
+    TLogo.Position = UDim2.new(0.5, -19, 0.5, -19)
+    TLogo.BackgroundTransparency = 1
+    TLogo.Image = NANG_LOGO
 
     local TBtn = Instance.new("TextButton", Toggle)
     TBtn.Size = UDim2.new(1, 0, 1, 0)
     TBtn.BackgroundTransparency = 1
     TBtn.Text = ""
 
-    -- Drag
     local dTog, dStart, dPos
     Toggle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -2560,10 +2764,10 @@ local function buildLauncher()
         end
     end)
 
-    -- Hub panel
+    -- Hub
     local Hub = Instance.new("Frame", GUI)
     Hub.Name = "LauncherHub"
-    Hub.Size = UDim2.new(0, 320, 0, 240)
+    Hub.Size = UDim2.new(0, 340, 0, 260)
     Hub.Position = UDim2.new(0, 62, 0, 48)
     Hub.BackgroundColor3 = P.bg_panel
     Hub.BorderSizePixel = 0
@@ -2573,24 +2777,30 @@ local function buildLauncher()
     HStroke.Color = P.border
     HStroke.Thickness = 1.4
 
+    local HubLogo = Instance.new("ImageLabel", Hub)
+    HubLogo.Size = UDim2.new(0, 34, 0, 34)
+    HubLogo.Position = UDim2.new(0, 14, 0, 12)
+    HubLogo.BackgroundTransparency = 1
+    HubLogo.Image = NANG_LOGO
+
     local HubTitle = Instance.new("TextLabel", Hub)
-    HubTitle.Size = UDim2.new(1, -24, 0, 30)
-    HubTitle.Position = UDim2.new(0, 12, 0, 10)
+    HubTitle.Size = UDim2.new(1, -70, 0, 24)
+    HubTitle.Position = UDim2.new(0, 54, 0, 12)
     HubTitle.BackgroundTransparency = 1
     HubTitle.Text = "NANG SUITE"
     HubTitle.TextColor3 = P.accent_hover
     HubTitle.Font = Enum.Font.GothamBold
-    HubTitle.TextSize = 18
+    HubTitle.TextSize = 17
     HubTitle.TextXAlignment = Enum.TextXAlignment.Left
 
     local HubSub = Instance.new("TextLabel", Hub)
-    HubSub.Size = UDim2.new(1, -24, 0, 16)
-    HubSub.Position = UDim2.new(0, 12, 0, 38)
+    HubSub.Size = UDim2.new(1, -70, 0, 16)
+    HubSub.Position = UDim2.new(0, 54, 0, 34)
     HubSub.BackgroundTransparency = 1
     HubSub.Text = "Pilih modul yang mau dijalankan"
     HubSub.TextColor3 = P.text_muted
     HubSub.Font = Enum.Font.Gotham
-    HubSub.TextSize = 10
+    HubSub.TextSize = 9
     HubSub.TextXAlignment = Enum.TextXAlignment.Left
 
     local function buildModuleButton(y, title, desc, accentColor, onClick)
@@ -2648,28 +2858,38 @@ local function buildLauncher()
     end
 
     buildModuleButton(
-        66,
+        62,
         "NANG RBXM",
         "Importer asset / toolbox / creator store",
         P.accent,
         function()
-            task.spawn(function()
-                nangSafe("NANG RBXM", launchNangRBXM)
+            nangRequireAccess(function()
+                task.spawn(function() nangSafe("NANG RBXM", launchNangRBXM) end)
             end)
         end
     )
 
     buildModuleButton(
-        140,
+        132,
         "NANG",
-        "Auto farm, server hop, anti afk",
+        "Auto farm, server hop, noclip, invisible",
         Color3.fromRGB(190, 140, 255),
         function()
-            task.spawn(function()
-                nangSafe("NANG Farm", launchNangFarm)
+            nangRequireAccess(function()
+                task.spawn(function() nangSafe("NANG Farm", launchNangFarm) end)
             end)
         end
     )
+
+    local StatusLbl = Instance.new("TextLabel", Hub)
+    StatusLbl.Size = UDim2.new(1, -24, 0, 16)
+    StatusLbl.Position = UDim2.new(0, 12, 0, 204)
+    StatusLbl.BackgroundTransparency = 1
+    StatusLbl.Text = "Access: " .. (nangIsWhitelisted(LocalPlayer.UserId) and "whitelist" or "key required")
+    StatusLbl.TextColor3 = P.text_muted
+    StatusLbl.Font = Enum.Font.Gotham
+    StatusLbl.TextSize = 8
+    StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
 
     local CloseHub = Instance.new("TextButton", Hub)
     CloseHub.Size = UDim2.new(1, -24, 0, 26)
