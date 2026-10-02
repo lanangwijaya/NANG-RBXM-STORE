@@ -1,69 +1,409 @@
 -- ═══════════════════════════════════════════════════════════════════════
--- REMOTE SCAN + FIRE
--- scan semua RemoteEvent, terus fire satu-satu (no args)
+-- REMOTE GUI SCANNER
+-- list semua RemoteEvent, klik buat fire, tombol FIRE ALL + SPAM
 -- ═══════════════════════════════════════════════════════════════════════
 local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
 local LP = Players.LocalPlayer
 
--- ── 1. SCAN ───────────────────────────────────────────────────────────
+local parent = pcall(function() return CoreGui.Name end) and CoreGui or LP:WaitForChild("PlayerGui")
+
+local old = parent:FindFirstChild("RemoteScanUI")
+if old then old:Destroy() end
+
+local GUI = Instance.new("ScreenGui")
+GUI.Name = "RemoteScanUI"
+GUI.ResetOnSpawn = false
+GUI.DisplayOrder = 99999
+GUI.IgnoreGuiInset = true
+GUI.Parent = parent
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- MAIN FRAME
+-- ═══════════════════════════════════════════════════════════════════════
+local Main = Instance.new("Frame", GUI)
+Main.Size = UDim2.new(0, 400, 0, 460)
+Main.Position = UDim2.new(0, 20, 0, 60)
+Main.BackgroundColor3 = Color3.fromRGB(14, 16, 20)
+Main.BorderSizePixel = 0
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+local MS = Instance.new("UIStroke", Main)
+MS.Color = Color3.fromRGB(120, 180, 255)
+MS.Thickness = 1.4
+
+-- header (drag)
+local Header = Instance.new("Frame", Main)
+Header.Size = UDim2.new(1, 0, 0, 32)
+Header.BackgroundColor3 = Color3.fromRGB(20, 24, 30)
+Header.BorderSizePixel = 0
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
+
+local Title = Instance.new("TextLabel", Header)
+Title.Size = UDim2.new(1, -70, 1, 0)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "REMOTE SCANNER"
+Title.TextColor3 = Color3.fromRGB(180, 220, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 12
+Title.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseBtn = Instance.new("TextButton", Header)
+CloseBtn.Size = UDim2.new(0, 26, 0, 22)
+CloseBtn.Position = UDim2.new(1, -30, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 11
+CloseBtn.BorderSizePixel = 0
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 4)
+CloseBtn.MouseButton1Click:Connect(function() GUI:Destroy() end)
+
+-- drag
+do
+    local dragging, dragInput, dragStart, startPos
+    local function update(input)
+        local delta = input.Position - dragStart
+        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+    Header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startPos = Main.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    Header.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if input == dragInput and dragging then update(input) end
+    end)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- BUTTONS
+-- ═══════════════════════════════════════════════════════════════════════
+local BtnRow = Instance.new("Frame", Main)
+BtnRow.Size = UDim2.new(1, -20, 0, 30)
+BtnRow.Position = UDim2.new(0, 10, 0, 40)
+BtnRow.BackgroundTransparency = 1
+
+local function mkBtn(text, x, w, color, cb)
+    local b = Instance.new("TextButton", BtnRow)
+    b.Size = UDim2.new(0, w, 1, 0)
+    b.Position = UDim2.new(0, x, 0, 0)
+    b.BackgroundColor3 = color
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 10
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+    b.MouseButton1Click:Connect(cb)
+    return b
+end
+
+local ScanBtn  = mkBtn("SCAN", 0, 80, Color3.fromRGB(40, 80, 140), function() end)
+local FireAll  = mkBtn("FIRE ALL", 88, 100, Color3.fromRGB(140, 60, 40), function() end)
+local SpamBtn  = mkBtn("SPAM: OFF", 196, 100, Color3.fromRGB(60, 60, 60), function() end)
+local ClearBtn = mkBtn("CLEAR", 304, 80, Color3.fromRGB(60, 60, 60), function() end)
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SEARCH BAR
+-- ═══════════════════════════════════════════════════════════════════════
+local Search = Instance.new("TextBox", Main)
+Search.Size = UDim2.new(1, -20, 0, 26)
+Search.Position = UDim2.new(0, 10, 0, 78)
+Search.BackgroundColor3 = Color3.fromRGB(22, 26, 32)
+Search.BorderSizePixel = 0
+Search.PlaceholderText = "filter nama remote..."
+Search.Text = ""
+Search.TextColor3 = Color3.fromRGB(200, 220, 255)
+Search.PlaceholderColor3 = Color3.fromRGB(120, 130, 140)
+Search.Font = Enum.Font.Code
+Search.TextSize = 11
+Search.TextXAlignment = Enum.TextXAlignment.Left
+Search.ClearTextOnFocus = false
+Instance.new("UICorner", Search).CornerRadius = UDim.new(0, 5)
+local SP = Instance.new("UIPadding", Search)
+SP.PaddingLeft = UDim.new(0, 8)
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SCROLL LIST
+-- ═══════════════════════════════════════════════════════════════════════
+local List = Instance.new("ScrollingFrame", Main)
+List.Size = UDim2.new(1, -20, 1, -160)
+List.Position = UDim2.new(0, 10, 0, 114)
+List.BackgroundColor3 = Color3.fromRGB(10, 12, 15)
+List.BorderSizePixel = 0
+List.ScrollBarThickness = 4
+List.ScrollBarImageColor3 = Color3.fromRGB(120, 180, 255)
+List.CanvasSize = UDim2.new(0, 0, 0, 0)
+List.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Instance.new("UICorner", List).CornerRadius = UDim.new(0, 6)
+local Layout = Instance.new("UIListLayout", List)
+Layout.Padding = UDim.new(0, 3)
+Layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- STATE
+-- ═══════════════════════════════════════════════════════════════════════
 local remotes = {}
-local function scan(parent)
-    for _, obj in ipairs(parent:GetDescendants()) do
-        if obj:IsA("RemoteEvent") then
-            table.insert(remotes, obj)
+local spamOn = false
+local spamThread = nil
+
+local function updateCount()
+    local total = 0
+    for _, c in ipairs(List:GetChildren()) do
+        if c:IsA("Frame") then total = total + 1 end
+    end
+    Title.Text = string.format("REMOTE SCANNER — %d visible", total)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- BUILD ROW
+-- ═══════════════════════════════════════════════════════════════════════
+local rowIndex = 0
+local function buildRow(remote, argList)
+    rowIndex = rowIndex + 1
+    local row = Instance.new("Frame", List)
+    row.Name = "R_" .. tostring(rowIndex)
+    row.Size = UDim2.new(1, -6, 0, 30)
+    row.BackgroundColor3 = Color3.fromRGB(18, 22, 28)
+    row.BorderSizePixel = 0
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 5)
+
+    local status = Instance.new("Frame", row)
+    status.Size = UDim2.new(0, 4, 1, -8)
+    status.Position = UDim2.new(0, 4, 0, 4)
+    status.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    status.BorderSizePixel = 0
+    Instance.new("UICorner", status).CornerRadius = UDim.new(1, 0)
+
+    local nameLbl = Instance.new("TextLabel", row)
+    nameLbl.Size = UDim2.new(1, -140, 0, 14)
+    nameLbl.Position = UDim2.new(0, 14, 0, 3)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Text = remote.Name
+    nameLbl.TextColor3 = Color3.fromRGB(220, 230, 245)
+    nameLbl.Font = Enum.Font.Code
+    nameLbl.TextSize = 11
+    nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local pathLbl = Instance.new("TextLabel", row)
+    pathLbl.Size = UDim2.new(1, -140, 0, 12)
+    pathLbl.Position = UDim2.new(0, 14, 0, 15)
+    pathLbl.BackgroundTransparency = 1
+    pathLbl.Text = (remote.Parent and remote.Parent:GetFullName() or "?")
+    pathLbl.TextColor3 = Color3.fromRGB(110, 130, 150)
+    pathLbl.Font = Enum.Font.Code
+    pathLbl.TextSize = 8
+    pathLbl.TextXAlignment = Enum.TextXAlignment.Left
+    pathLbl.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local clickCount = 0
+    local countLbl = Instance.new("TextLabel", row)
+    countLbl.Size = UDim2.new(0, 40, 1, 0)
+    countLbl.Position = UDim2.new(1, -86, 0, 0)
+    countLbl.BackgroundTransparency = 1
+    countLbl.Text = "0"
+    countLbl.TextColor3 = Color3.fromRGB(140, 150, 160)
+    countLbl.Font = Enum.Font.Code
+    countLbl.TextSize = 10
+
+    -- fire button (no args)
+    local fireBtn = Instance.new("TextButton", row)
+    fireBtn.Size = UDim2.new(0, 40, 0, 22)
+    fireBtn.Position = UDim2.new(1, -44, 0, 4)
+    fireBtn.BackgroundColor3 = Color3.fromRGB(40, 90, 40)
+    fireBtn.BorderSizePixel = 0
+    fireBtn.Text = "FIRE"
+    fireBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fireBtn.Font = Enum.Font.GothamBold
+    fireBtn.TextSize = 9
+    Instance.new("UICorner", fireBtn).CornerRadius = UDim.new(0, 4)
+
+    fireBtn.MouseButton1Click:Connect(function()
+        local ok, err = pcall(function()
+            if remote:IsA("RemoteEvent") then
+                remote:FireServer()
+            else
+                remote:InvokeServer()
+            end
+        end)
+        clickCount = clickCount + 1
+        countLbl.Text = tostring(clickCount)
+        if ok then
+            status.BackgroundColor3 = Color3.fromRGB(80, 200, 80)
+            fireBtn.BackgroundColor3 = Color3.fromRGB(80, 160, 80)
+            task.delay(0.3, function()
+                if fireBtn.Parent then
+                    fireBtn.BackgroundColor3 = Color3.fromRGB(40, 90, 40)
+                end
+            end)
+        else
+            status.BackgroundColor3 = Color3.fromRGB(200, 80, 80)
+            fireBtn.BackgroundColor3 = Color3.fromRGB(140, 40, 40)
+            warn("[scanner] " .. remote.Name .. " err: " .. tostring(err))
+        end
+    end)
+
+    -- long press / right click = fire with extra args
+    return row
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- SCAN
+-- ═══════════════════════════════════════════════════════════════════════
+local function clearList()
+    for _, c in ipairs(List:GetChildren()) do
+        if c:IsA("Frame") then c:Destroy() end
+    end
+    rowIndex = 0
+    remotes = {}
+end
+
+local function scanNow()
+    clearList()
+    local function walk(parent)
+        for _, obj in ipairs(parent:GetDescendants()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                table.insert(remotes, obj)
+            end
         end
     end
+    walk(RS)
+    walk(workspace)
+    pcall(function() walk(game:GetService("ReplicatedFirst")) end)
+    pcall(function() walk(game:GetService("Players")) end)
+
+    -- sort by path
+    table.sort(remotes, function(a, b)
+        return (a.Parent and a.Parent:GetFullName() or "") < (b.Parent and b.Parent:GetFullName() or "")
+    end)
+
+    for _, r in ipairs(remotes) do buildRow(r) end
+    updateCount()
+    print(string.format("[scanner] %d remotes", #remotes))
 end
 
-scan(RS)
-scan(workspace)
-scan(game:GetService("ReplicatedFirst"))
+ScanBtn.MouseButton1Click:Connect(scanNow)
+ClearBtn.MouseButton1Click:Connect(function()
+    clearList()
+    updateCount()
+end)
 
-print("\n=== SCAN ===")
-print("total RemoteEvent: " .. #remotes)
-
--- group by parent path
-local byPath = {}
-for _, r in ipairs(remotes) do
-    local p = r.Parent and r.Parent:GetFullName() or "?"
-    byPath[p] = byPath[p] or {}
-    table.insert(byPath[p], r.Name)
-end
-
-for path, names in pairs(byPath) do
-    print("\n[" .. path .. "]")
-    for _, n in ipairs(names) do
-        print("  - " .. n)
+-- ═══════════════════════════════════════════════════════════════════════
+-- FILTER
+-- ═══════════════════════════════════════════════════════════════════════
+Search:GetPropertyChangedSignal("Text"):Connect(function()
+    local q = Search.Text:lower()
+    for _, c in ipairs(List:GetChildren()) do
+        if c:IsA("Frame") then
+            if q == "" then
+                c.Visible = true
+            else
+                local n = ""
+                local nl = c:FindFirstChildOfClass("TextLabel")
+                if nl then n = nl.Text:lower() end
+                c.Visible = n:find(q, 1, true) ~= nil
+            end
+        end
     end
-end
+    updateCount()
+end)
 
--- ── 2. FIRE SEMUA ─────────────────────────────────────────────────────
-print("\n=== FIRING (no args) ===")
-task.wait(1)
+-- ═══════════════════════════════════════════════════════════════════════
+-- FIRE ALL
+-- ═══════════════════════════════════════════════════════════════════════
+FireAll.MouseButton1Click:Connect(function()
+    print("[scanner] FIRE ALL — " .. #remotes .. " remotes")
+    for _, r in ipairs(remotes) do
+        pcall(function()
+            if r:IsA("RemoteEvent") then
+                r:FireServer()
+            else
+                task.spawn(function() r:InvokeServer() end)
+            end
+        end)
+        task.wait(0.08)
+    end
+    print("[scanner] done")
+end)
 
-for i, r in ipairs(remotes) do
-    local ok, err = pcall(function() r:FireServer() end)
-    print(string.format("[%d/%d] %s  ->  %s",
-        i, #remotes, r.Name,
-        ok and "fired" or ("ERR: " .. tostring(err):sub(1, 40))
-    ))
-    task.wait(0.15)
-end
+-- ═══════════════════════════════════════════════════════════════════════
+-- SPAM TOGGLE
+-- ═══════════════════════════════════════════════════════════════════════
+SpamBtn.MouseButton1Click:Connect(function()
+    spamOn = not spamOn
+    if spamOn then
+        SpamBtn.Text = "SPAM: ON"
+        SpamBtn.BackgroundColor3 = Color3.fromRGB(140, 40, 40)
+        print("[scanner] spam ON")
+        spamThread = task.spawn(function()
+            while spamOn do
+                for _, r in ipairs(remotes) do
+                    if not spamOn then break end
+                    pcall(function()
+                        if r:IsA("RemoteEvent") then
+                            r:FireServer()
+                        else
+                            task.spawn(function() r:InvokeServer() end)
+                        end
+                    end)
+                    task.wait(0.05)
+                end
+            end
+        end)
+    else
+        SpamBtn.Text = "SPAM: OFF"
+        SpamBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        print("[scanner] spam OFF")
+    end
+end)
 
-print("\n=== selesai. cek apa yang berubah di game ===")
+-- ═══════════════════════════════════════════════════════════════════════
+-- AUTO SCAN
+-- ═══════════════════════════════════════════════════════════════════════
+scanNow()
 
--- ── 3. HOLD + REPEAT (opsional) ───────────────────────────────────────
--- kalau lu mau spam terus, uncomment blok bawah
---[[
-_G.SPAM_ON = true
+-- re-scan tiap 5 detik buat nangkep remote baru
 task.spawn(function()
-    while _G.SPAM_ON do
-        for _, r in ipairs(remotes) do
-            pcall(function() r:FireServer() end)
-            task.wait(0.05)
+    while GUI.Parent do
+        task.wait(5)
+        if not spamOn then
+            local before = #remotes
+            local newOnes = {}
+            local function walk(parent)
+                for _, obj in ipairs(parent:GetDescendants()) do
+                    if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                        local found = false
+                        for _, r in ipairs(remotes) do
+                            if r == obj then found = true; break end
+                        end
+                        if not found then table.insert(newOnes, obj) end
+                    end
+                end
+            end
+            walk(RS)
+            walk(workspace)
+            for _, r in ipairs(newOnes) do
+                table.insert(remotes, r)
+                buildRow(r)
+            end
+            if #newOnes > 0 then
+                print(string.format("[scanner] +%d new remotes", #newOnes))
+                updateCount()
+            end
         end
     end
 end)
--- matiin: _G.SPAM_ON = false
---]]
+
+print("[scanner] loaded — " .. #remotes .. " remotes")
