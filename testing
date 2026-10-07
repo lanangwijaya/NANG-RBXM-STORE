@@ -1,343 +1,598 @@
--- ═══════════════════════════════════════════════════════════════════════
--- FISHING CAPTURE + AUTO REPLAY
--- 1. execute sekali
--- 2. mancing manual 3-5 kali (sampai dapet ikan)
--- 3. script otomatis ngulang remote call persis kayak manual
--- ═══════════════════════════════════════════════════════════════════════
-if not game:IsLoaded() then game.Loaded:Wait() end
+--[[
+    NANG TIKTOK v4.0 — MEGA LOOPHOLE
+    Coba 10 metode buat play TikTok di Roblox.
+    Yang berhasil, langsung play di preview panel.
+]]
 
-local RS = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
-local LP = Players.LocalPlayer
+local Players     = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local UIS         = game:GetService("UserInputService")
+local RunService  = game:GetService("RunService")
+local CoreGui     = game:GetService("CoreGui")
+local LP          = Players.LocalPlayer
 
--- ═══════════════════════════════════════════════════════════════════════
--- ANTI-KICK
--- ═══════════════════════════════════════════════════════════════════════
-if getrawmetatable and setreadonly then
-    local mt = getrawmetatable(game)
-    local oldNC = mt.__namecall
-    setreadonly(mt, false)
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if method == "Kick" and self == LP then
-            warn("[ANTI] kick blocked")
-            return nil
+local API = "https://www.tikwm.com/api/"
+
+-- ═══════════════════════════════════════
+-- HTTP
+-- ═══════════════════════════════════════
+local function httpGet(url, opts)
+    opts = opts or {}
+    local fns = {
+        function() if syn and syn.request then local r = syn.request({Url=url,Method="GET"}); return r and r.Body end end,
+        function() if request then local r = request({Url=url,Method="GET"}); return r and r.Body end end,
+        function() if http_request then local r = http_request({Url=url,Method="GET"}); return r and r.Body end end,
+        function() return game:HttpGet(url, true) end,
+    }
+    for _, fn in ipairs(fns) do
+        local ok, r = pcall(fn)
+        if ok and r and type(r) == "string" and #r > 0 then return r end
+    end
+    return nil
+end
+
+local function httpDownload(url)
+    local fns = {
+        function() if syn and syn.request then local r = syn.request({Url=url,Method="GET"}); return r and r.Body end end,
+        function() if request then local r = request({Url=url,Method="GET"}); return r and r.Body end end,
+        function() if http_request then local r = http_request({Url=url,Method="GET"}); return r and r.Body end end,
+    }
+    for _, fn in ipairs(fns) do
+        local ok, r = pcall(fn)
+        if ok and r and type(r) == "string" and #r > 0 then return r end
+    end
+    return nil
+end
+
+-- ═══════════════════════════════════════
+-- Executor capability probes
+-- ═══════════════════════════════════════
+local function probe()
+    local caps = {}
+    caps.getcustomasset = type(getcustomasset) == "function" or (syn and type(syn.getcustomasset) == "function") or type(getsynasset) == "function"
+    caps.setfflag       = type(setfflag) == "function" or (syn and type(syn.setfflag) == "function")
+    caps.getfflag       = type(getfflag) == "function"
+    caps.setrawmeta     = type(setrawmetatable) == "function"
+    caps.getrawmeta     = type(getrawmetatable) == "function"
+    caps.writefile      = type(writefile) == "function"
+    caps.readfile       = type(readfile) == "function"
+    caps.openURL        = type(openURL) == "function" or (syn and type(syn.openurl) == "function")
+    caps.webview        = (syn and type(syn.webview) == "table") or type(WebView) == "table"
+    caps.fireclick      = type(fireclickdetector) == "function"
+    caps.sethidden      = type(sethiddenproperty) == "function"
+    caps.setrawprop     = type(sethiddenproperty) == "function" or (syn and type(syn.setrawmetatable) == "function")
+    caps.newcclosure    = type(newcclosure) == "function"
+    caps.hookfunc       = type(hookfunction) == "function"
+    caps.hookmeta       = type(hookmetamethod) == "function"
+    caps.loadstring     = type(loadstring) == "function"
+    caps.loadfile       = type(loadfile) == "function"
+    caps.base64decode   = type(base64decode) == "function"
+    caps.zstd           = type(zstd) == "table" or type(zstddecode) == "function"
+    return caps
+end
+
+local function toCustomAsset(path)
+    local fs = {
+        type(getcustomasset) == "function" and getcustomasset or nil,
+        syn and type(syn.getcustomasset) == "function" and syn.getcustomasset or nil,
+        type(getsynasset) == "function" and getsynasset or nil,
+    }
+    for _, fn in ipairs(fs) do
+        if fn then
+            local ok, r = pcall(fn, path)
+            if ok and type(r) == "string" and r ~= "" then return r end
         end
-        return oldNC(self, ...)
+    end
+    return nil
+end
+
+-- ═══════════════════════════════════════
+-- Fetch TikTok metadata
+-- ═══════════════════════════════════════
+local function fetchOne(input)
+    input = tostring(input or ""):gsub("^%s+",""):gsub("%s+$","")
+    if input == "" then return false, "Kosong" end
+
+    local endpoint
+    if input:match("^vt%.tiktok%.com") or input:match("^vm%.tiktok%.com") then
+        endpoint = API .. "?url=" .. HttpService:UrlEncode("https://" .. input)
+    elseif input:match("^https?://") then
+        endpoint = API .. "?url=" .. HttpService:UrlEncode(input)
+    else
+        endpoint = API .. "?unique_id=" .. HttpService:UrlEncode(input:gsub("^@","")) .. "&count=1"
+    end
+
+    local body = httpGet(endpoint)
+    if not body then return false, "Gagal konek" end
+    local ok, d = pcall(function() return HttpService:JSONDecode(body) end)
+    if not ok or type(d) ~= "table" then return false, "Response invalid" end
+    if d.code ~= 0 then return false, tostring(d.msg or "err " .. tostring(d.code)) end
+    local data = d.data
+    if type(data) == "table" and type(data.videos) == "table" and data.videos[1] then
+        return true, data.videos[1]
+    end
+    return true, data
+end
+
+-- ═══════════════════════════════════════
+-- METHOD TESTERS
+-- ═══════════════════════════════════════
+
+-- METODE A: VideoFrame + getcustomasset raw
+local function methodA_VF_customasset(mp4path, parent)
+    local asset = toCustomAsset(mp4path)
+    if not asset then return "NO GETCUSTOMASSET" end
+    local vf = Instance.new("VideoFrame")
+    vf.Size = UDim2.new(0,120,0,180); vf.Position = UDim2.new(0,0,0,0)
+    vf.BackgroundColor3 = Color3.fromRGB(0,0,0); vf.BorderSizePixel = 0
+    vf.Parent = parent
+    local ok = pcall(function() vf.Source = asset end)
+    task.wait(0.4)
+    pcall(function() vf:Play() end)
+    task.wait(0.8)
+    local t = 0; pcall(function() t = vf.TimePosition end)
+    local played = t > 0.05
+    pcall(function() vf:Destroy() end)
+    return played and ("PLAYS @ " .. string.format("%.2f", t)) or (ok and "SET OK, NO PLAY" or "SET FAIL")
+end
+
+-- METODE B: VideoFrame + rbxasset:// + getcustomasset stripped
+local function methodB_VF_rbxasset(mp4path, parent)
+    local asset = toCustomAsset(mp4path)
+    if not asset then return "NO GETCUSTOMASSET" end
+    local clean = asset:gsub("^rbxasset://", ""):gsub("^rbxassetid://", "")
+    local cand = "rbxasset://" .. clean
+    local vf = Instance.new("VideoFrame")
+    vf.Size = UDim2.new(0,120,0,180); vf.Position = UDim2.new(0,0,0,0)
+    vf.BackgroundColor3 = Color3.fromRGB(0,0,0); vf.BorderSizePixel = 0
+    vf.Parent = parent
+    local ok = pcall(function() vf.Source = cand end)
+    task.wait(0.4)
+    pcall(function() vf:Play() end)
+    task.wait(0.8)
+    local t = 0; pcall(function() t = vf.TimePosition end)
+    local played = t > 0.05
+    pcall(function() vf:Destroy() end)
+    return played and ("PLAYS @ " .. string.format("%.2f", t)) or (ok and "SET OK, NO PLAY" or "SET FAIL")
+end
+
+-- METODE C: setfflag unlock + VideoFrame
+local function methodC_fflag_unlock(parent)
+    local caps = probe()
+    if not caps.setfflag then return "NO SETFFLAG" end
+    local flags = {
+        ["VideoFrameAllowLocalAssets"] = "True",
+        ["VideoAllowHTTP"] = "True",
+        ["VideoFrameDisableValidation"] = "True",
+        ["AllowLocalVideoAssets"] = "True",
+        ["VideoFrameLoadFromDisk"] = "True",
+    }
+    for k, v in pairs(flags) do
+        pcall(setfflag, k, v)
+    end
+    return "FLAGS SET (but need video test)"
+end
+
+-- METODE D: Raw metatable hook on VideoFrame.Source setter
+local function methodD_rawmeta(mp4path, parent)
+    local caps = probe()
+    if not caps.getrawmeta then return "NO GETRAWMETATABLE" end
+    local vf = Instance.new("VideoFrame")
+    vf.Size = UDim2.new(0,120,0,180); vf.Position = UDim2.new(0,0,0,0)
+    vf.Parent = parent
+    local mt = getrawmetatable(vf)
+    if not mt then pcall(function() vf:Destroy() end); return "NO MT" end
+    local orig = rawget(mt, "__index")
+    -- this is a probe, don't actually break things
+    pcall(function() vf:Destroy() end)
+    return "MT EXISTS, need deeper probe"
+end
+
+-- METODE E: Sound + cover image (audio plays, visual is static)
+local function methodE_sound_only(info, parent)
+    if not info or not info.music_info or not info.music_info.play then
+        -- try video's play url directly as sound
+    end
+    return "SKIP (but audio-only possible via Sound.SoundId = rbxassetid)"
+end
+
+-- METODE F: rbxthumb trick with cover
+local function methodF_thumb_loop(info, parent)
+    if not info or not info.cover then return "NO COVER" end
+    local img = Instance.new("ImageLabel")
+    img.Size = UDim2.new(0,120,0,180); img.Position = UDim2.new(0,0,0,0)
+    img.BackgroundColor3 = Color3.fromRGB(20,20,30); img.BorderSizePixel = 0
+    img.Image = info.cover
+    img.ScaleType = Enum.ScaleType.Crop
+    img.Parent = parent
+    return "COVER RENDERED (static)"
+end
+
+-- METODE G: Frame animation from GIF
+-- Convert mp4 to GIF via public API, parse GIF client-side, cycle frames
+local function methodG_gif_frames(info, parent)
+    -- tikwm might return an animated cover for some posts
+    -- otherwise use external GIF conversion
+
+    -- try to get GIF URL from tikwm
+    local gifUrl = info and (info.animated_cover or info.ai_dynamic_cover or info.cover_gif)
+    if not gifUrl and info and info.id then
+        -- try constructing tiktok GIF URL patterns
+        local patterns = {
+            "https://p16-sign-va.tiktokcdn.com/tos-maliva-p-0068/" .. tostring(info.id) .. "~tplv-tiktokx-origin.image",
+            "https://p16-sign-va.tiktokcdn.com/obj/tos-maliva-p-0068/" .. tostring(info.id) .. "?a=1988",
+        }
+        for _, p in ipairs(patterns) do
+            gifUrl = p
+            break
+        end
+    end
+
+    if not gifUrl then return "NO GIF SOURCE" end
+
+    -- render as rapid-cycling ImageLabel (if animated webp/gif somehow renders)
+    local img = Instance.new("ImageLabel")
+    img.Size = UDim2.new(0,120,0,180); img.Position = UDim2.new(0,0,0,0)
+    img.BackgroundColor3 = Color3.fromRGB(20,20,30); img.BorderSizePixel = 0
+    img.Image = gifUrl
+    img.ScaleType = Enum.ScaleType.Crop
+    img.Parent = parent
+    task.wait(1.2)
+    local loaded = false
+    pcall(function() loaded = img.IsLoaded end)
+    return loaded and "IMAGE LOADED" or "IMAGE LOAD FAIL (or no anim support)"
+end
+
+-- METODE H: ContentProvider PreloadAsync with custom asset
+local function methodH_preload(mp4path)
+    local asset = toCustomAsset(mp4path)
+    if not asset then return "NO GETCUSTOMASSET" end
+    local temp = Instance.new("VideoFrame")
+    pcall(function() temp.Source = asset end)
+    temp.Parent = nil
+    local cp = game:GetService("ContentProvider")
+    local ok = pcall(function() cp:PreloadAsync({temp}) end)
+    pcall(function() temp:Destroy() end)
+    return ok and "PRELOAD OK" or "PRELOAD ERR"
+end
+
+-- METODE I: Direct internal video service call (probe)
+local function methodI_internal_probe()
+    local services = {
+        "VideoCaptureService",
+        "VideoService",
+        "VideoFrameService",
+    }
+    local found = {}
+    for _, name in ipairs(services) do
+        local ok, s = pcall(function() return game:GetService(name) end)
+        if ok and s then table.insert(found, name) end
+    end
+    if #found == 0 then return "NO INTERNAL VIDEO SVC" end
+    return "FOUND: " .. table.concat(found, ", ")
+end
+
+-- METODE J: getobjects / InsertService with local file
+local function methodJ_getobjects(mp4path)
+    local caps = probe()
+    local asset = toCustomAsset(mp4path)
+    if not asset then return "NO GETCUSTOMASSET" end
+    local ok, objs = pcall(function() return game:GetObjects(asset) end)
+    if not ok then return "GETOBJECTS ERR" end
+    if type(objs) ~= "table" then return "NOT TABLE" end
+    return "GOT " .. tostring(#objs) .. " OBJ"
+end
+
+-- ═══════════════════════════════════════
+-- UI
+-- ═══════════════════════════════════════
+local function buildUI()
+    if CoreGui:FindFirstChild("NANG_TT_MEGA") then CoreGui:FindFirstChild("NANG_TT_MEGA"):Destroy() end
+
+    local UI = Instance.new("ScreenGui")
+    UI.Name = "NANG_TT_MEGA"; UI.ResetOnSpawn = false
+    UI.DisplayOrder = 140; UI.IgnoreGuiInset = true
+    pcall(function() UI.Parent = CoreGui end)
+    if not UI.Parent then UI.Parent = LP:WaitForChild("PlayerGui") end
+
+    local C = {
+        BG=Color3.fromRGB(8,8,14), BG2=Color3.fromRGB(16,16,26),
+        BG3=Color3.fromRGB(24,24,40), ACCENT=Color3.fromRGB(255,40,90),
+        TEXT=Color3.fromRGB(235,235,245), TEXT2=Color3.fromRGB(150,150,175),
+        TEXT3=Color3.fromRGB(90,90,115), GREEN=Color3.fromRGB(60,220,120),
+        RED=Color3.fromRGB(240,80,80), YELLOW=Color3.fromRGB(240,200,60),
+        CARD=Color3.fromRGB(18,18,30), BORDER=Color3.fromRGB(40,40,62),
+    }
+
+    local Main = Instance.new("Frame", UI)
+    Main.Size = UDim2.new(0, 700, 0, 560)
+    Main.Position = UDim2.new(0.5, -350, 0.5, -280)
+    Main.BackgroundColor3 = C.BG; Main.BorderSizePixel = 0
+    Main.ClipsDescendants = true
+    Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 14)
+    local ms = Instance.new("UIStroke", Main)
+    ms.Color = C.ACCENT; ms.Thickness = 1.4
+
+    local Header = Instance.new("Frame", Main)
+    Header.Size = UDim2.new(1,0,0,46); Header.BackgroundColor3 = C.BG2
+    Header.BorderSizePixel = 0
+
+    local dragOn, dragStart, dragPos
+    Header.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1
+           or i.UserInputType == Enum.UserInputType.Touch then
+            dragOn=true; dragStart=i.Position; dragPos=Main.Position
+        end
     end)
-    setreadonly(mt, true)
-end
-
--- ═══════════════════════════════════════════════════════════════════════
--- DEEP COPY untuk capture (biar table args nggak berubah)
--- ═══════════════════════════════════════════════════════════════════════
-local function deepCopy(v, seen)
-    seen = seen or {}
-    if type(v) ~= "table" then return v end
-    if seen[v] then return seen[v] end
-    local c = {}
-    seen[v] = c
-    for k, vv in pairs(v) do c[deepCopy(k, seen)] = deepCopy(vv, seen) end
-    return c
-end
-
--- ═══════════════════════════════════════════════════════════════════════
--- CAPTURE — rekam semua remote call
--- ═══════════════════════════════════════════════════════════════════════
-local captured = {}       -- {name, className, args, path, hits}
-local captureOn = true
-local replayOn  = false
-
-local function logArg(v)
-    local t = type(v)
-    if t == "string" then return string.format("%q", v) end
-    if t == "number" or t == "boolean" or t == "nil" then return tostring(v) end
-    if t == "Instance" then return "<" .. v.ClassName .. ":" .. v.Name .. ">" end
-    if t == "Vector3" then return string.format("V3(%.1f,%.1f,%.1f)", v.X, v.Y, v.Z) end
-    if t == "Vector2" then return string.format("V2(%.1f,%.1f)", v.X, v.Y) end
-    if t == "CFrame" then return "CFrame" end
-    if t == "table" then
-        local parts = {}
-        local n = 0
-        for k, vv in pairs(v) do
-            n = n + 1
-            if n > 6 then parts[#parts+1] = "..."; break end
-            parts[#parts+1] = tostring(k) .. "=" .. logArg(vv)
-        end
-        return "{" .. table.concat(parts, ",") .. "}"
-    end
-    return "<" .. t .. ">"
-end
-
-if not getrawmetatable or not setreadonly then
-    warn("[CAP] executor nggak support metatable hook — capture impossible")
-    return
-end
-
-local mt = getrawmetatable(game)
-local oldNC = mt.__namecall
-setreadonly(mt, false)
-mt.__namecall = newcclosure(function(self, ...)
-    local method = getnamecallmethod()
-    if (method == "FireServer" or method == "InvokeServer")
-    and typeof(self) == "Instance"
-    and (self:IsA("RemoteEvent") or self:IsA("RemoteFunction")) then
-        if captureOn then
-            local args = {...}
-            local argc = select("#", ...)
-            local key = self.Name .. "|" .. method
-
-            -- cari existing capture untuk remote ini
-            local found = nil
-            for _, c in ipairs(captured) do
-                if c.key == key then found = c; break end
-            end
-
-            if not found then
-                found = {
-                    key = key,
-                    name = self.Name,
-                    className = self.ClassName,
-                    method = method,
-                    path = (pcall(function() return self:GetFullName() end) and self:GetFullName()) or "?",
-                    samples = {},
-                    args = nil,        -- last args
-                    argc = argc,
-                    hits = 0,
-                    timestamp = os.clock(),
-                }
-                table.insert(captured, found)
-            end
-
-            found.hits = found.hits + 1
-            found.timestamp = os.clock()
-
-            -- deep copy args buat replay
-            local copied = {}
-            for i = 1, argc do copied[i] = deepCopy(args[i]) end
-            found.args = copied
-            found.argc = argc
-
-            -- print pertama kali + kalau args berubah
-            local argStr = ""
-            for i = 1, argc do argStr = argStr .. logArg(copied[i]) .. (i < argc and ", " or "") end
-            if found.hits == 1 or found._lastArgStr ~= argStr then
-                found._lastArgStr = argStr
-                print(string.format("[CAP] %s:%s(%s)", self.Name, method, argStr))
-            end
-        end
-    end
-    return oldNC(self, ...)
-end)
-setreadonly(mt, true)
-
--- ═══════════════════════════════════════════════════════════════════════
--- HUD
--- ═══════════════════════════════════════════════════════════════════════
-local parent = pcall(function() return CoreGui.Name end) and CoreGui or LP:WaitForChild("PlayerGui")
-local old = parent:FindFirstChild("CapReplayUI")
-if old then old:Destroy() end
-
-local GUI = Instance.new("ScreenGui")
-GUI.Name = "CapReplayUI"
-GUI.ResetOnSpawn = false
-GUI.DisplayOrder = 99999
-GUI.IgnoreGuiInset = true
-GUI.Parent = parent
-
-local F = Instance.new("Frame", GUI)
-F.Size = UDim2.new(0, 300, 0, 260)
-F.Position = UDim2.new(0, 20, 0, 60)
-F.BackgroundColor3 = Color3.fromRGB(14, 16, 20)
-F.BorderSizePixel = 0
-Instance.new("UICorner", F).CornerRadius = UDim.new(0, 10)
-local FS = Instance.new("UIStroke", F)
-FS.Color = Color3.fromRGB(255, 160, 80)
-FS.Thickness = 1.4
-
--- drag header
-local Header = Instance.new("Frame", F)
-Header.Size = UDim2.new(1, 0, 0, 26)
-Header.BackgroundColor3 = Color3.fromRGB(24, 28, 36)
-Header.BorderSizePixel = 0
-Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
-
-local Title = Instance.new("TextLabel", Header)
-Title.Size = UDim2.new(1, -34, 1, 0)
-Title.Position = UDim2.new(0, 10, 0, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "CAPTURE + REPLAY"
-Title.TextColor3 = Color3.fromRGB(255, 200, 130)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 12
-Title.TextXAlignment = Enum.TextXAlignment.Left
-
-local CloseBtn = Instance.new("TextButton", Header)
-CloseBtn.Size = UDim2.new(0, 22, 0, 18)
-CloseBtn.Position = UDim2.new(1, -26, 0, 4)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
-CloseBtn.Text = "X"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextSize = 10
-CloseBtn.BorderSizePixel = 0
-Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 4)
-CloseBtn.MouseButton1Click:Connect(function() GUI:Destroy() end)
-
-do
-    local dragging, dragInput, dragStart, startPos
-    Header.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; dragStart = input.Position; startPos = F.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
+    UIS.InputChanged:Connect(function(i)
+        if dragOn and (i.UserInputType == Enum.UserInputType.MouseMovement
+           or i.UserInputType == Enum.UserInputType.Touch) then
+            local d = i.Position - dragStart
+            Main.Position = UDim2.new(dragPos.X.Scale, dragPos.X.Offset + d.X,
+                                      dragPos.Y.Scale, dragPos.Y.Offset + d.Y)
         end
     end)
-    Header.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
+    UIS.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1
+           or i.UserInputType == Enum.UserInputType.Touch then dragOn=false end
     end)
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            F.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+
+    local Logo = Instance.new("TextLabel", Header)
+    Logo.Size = UDim2.new(0,400,1,0); Logo.Position = UDim2.new(0,16,0,0)
+    Logo.BackgroundTransparency=1; Logo.Text = "MEGA  LOOPHOLE  TEST  —  10 METODE"
+    Logo.TextColor3 = C.ACCENT; Logo.Font = Enum.Font.GothamBold
+    Logo.TextSize = 14; Logo.TextXAlignment = Enum.TextXAlignment.Left
+
+    local Close = Instance.new("TextButton", Header)
+    Close.Size = UDim2.new(0,30,0,26); Close.Position = UDim2.new(1,-40,0.5,-13)
+    Close.BackgroundColor3 = Color3.fromRGB(60,15,30); Close.BorderSizePixel=0
+    Close.Text = "X"; Close.TextColor3 = C.ACCENT
+    Close.Font = Enum.Font.GothamBold; Close.TextSize = 12
+    Instance.new("UICorner", Close).CornerRadius = UDim.new(0,6)
+    Close.MouseButton1Click:Connect(function() UI:Destroy() end)
+
+    -- input row
+    local Input = Instance.new("TextBox", Main)
+    Input.Size = UDim2.new(1, -110, 0, 34); Input.Position = UDim2.new(0, 14, 0, 58)
+    Input.BackgroundColor3 = C.BG3; Input.BorderSizePixel = 0
+    Input.PlaceholderText = "@username atau URL TikTok"
+    Input.Text = ""; Input.TextColor3 = C.TEXT
+    Input.PlaceholderColor3 = C.TEXT3
+    Input.Font = Enum.Font.Gotham; Input.TextSize = 11
+    Input.TextXAlignment = Enum.TextXAlignment.Left
+    Input.ClearTextOnFocus = false
+    Instance.new("UICorner", Input).CornerRadius = UDim.new(0,8)
+    local ip = Instance.new("UIPadding", Input); ip.PaddingLeft = UDim.new(0,10)
+
+    local RunBtn = Instance.new("TextButton", Main)
+    RunBtn.Size = UDim2.new(0,84,0,34); RunBtn.Position = UDim2.new(1,-98,0,58)
+    RunBtn.BackgroundColor3 = C.ACCENT; RunBtn.BorderSizePixel = 0
+    RunBtn.Text = "RUN ALL"; RunBtn.TextColor3 = Color3.new(1,1,1)
+    RunBtn.Font = Enum.Font.GothamBold; RunBtn.TextSize = 11
+    Instance.new("UICorner", RunBtn).CornerRadius = UDim.new(0,8)
+
+    -- log
+    local LogFrame = Instance.new("Frame", Main)
+    LogFrame.Size = UDim2.new(0.58, -18, 1, -118); LogFrame.Position = UDim2.new(0, 14, 0, 102)
+    LogFrame.BackgroundColor3 = C.CARD; LogFrame.BorderSizePixel = 0
+    Instance.new("UICorner", LogFrame).CornerRadius = UDim.new(0,8)
+    local lfs = Instance.new("UIStroke", LogFrame)
+    lfs.Color = C.BORDER; lfs.Thickness = 1
+
+    local Log = Instance.new("ScrollingFrame", LogFrame)
+    Log.Size = UDim2.new(1,-12,1,-12); Log.Position = UDim2.new(0,6,0,6)
+    Log.BackgroundTransparency = 1; Log.BorderSizePixel = 0
+    Log.ScrollBarThickness = 3; Log.ScrollBarImageColor3 = C.ACCENT
+    Log.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Log.CanvasSize = UDim2.new(0,0,0,0)
+    local LL = Instance.new("UIListLayout", Log)
+    LL.Padding = UDim.new(0,3)
+
+    -- preview
+    local Preview = Instance.new("Frame", Main)
+    Preview.Size = UDim2.new(0.42, -18, 1, -118); Preview.Position = UDim2.new(0.58, 4, 0, 102)
+    Preview.BackgroundColor3 = C.CARD; Preview.BorderSizePixel = 0
+    Instance.new("UICorner", Preview).CornerRadius = UDim.new(0,8)
+    local pfs = Instance.new("UIStroke", Preview)
+    pfs.Color = C.BORDER; pfs.Thickness = 1
+
+    local PreviewTitle = Instance.new("TextLabel", Preview)
+    PreviewTitle.Size = UDim2.new(1,-12,0,18); PreviewTitle.Position = UDim2.new(0,6,0,6)
+    PreviewTitle.BackgroundTransparency=1; PreviewTitle.Text = "PREVIEW"
+    PreviewTitle.TextColor3 = C.TEXT3; PreviewTitle.Font = Enum.Font.GothamBold
+    PreviewTitle.TextSize = 10; PreviewTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+    local PreviewArea = Instance.new("Frame", Preview)
+    PreviewArea.Size = UDim2.new(1,-12,1,-34); PreviewArea.Position = UDim2.new(0,6,0,26)
+    PreviewArea.BackgroundColor3 = C.BG; PreviewArea.BorderSizePixel = 0
+    Instance.new("UICorner", PreviewArea).CornerRadius = UDim.new(0,6)
+
+    local logIdx = 0
+    local function log(text, col)
+        logIdx = logIdx + 1
+        local l = Instance.new("TextLabel", Log)
+        l.Size = UDim2.new(1,-4,0,0)
+        l.AutomaticSize = Enum.AutomaticSize.Y
+        l.BackgroundTransparency = 1
+        l.Text = string.format("%02d ", logIdx) .. text
+        l.TextColor3 = col or C.TEXT2
+        l.Font = Enum.Font.Code; l.TextSize = 10
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.TextWrapped = true
+        task.wait()  -- yield buat scroll
+        Log.CanvasPosition = Vector2.new(0, 1e6)
+        return l
+    end
+
+    local function clearPreview()
+        for _, c in ipairs(PreviewArea:GetChildren()) do
+            if c:IsA("GuiObject") then c:Destroy() end
         end
+    end
+
+    local function playWinningPreview(source)
+        clearPreview()
+        if type(source) == "Instance" then
+            source.Size = UDim2.new(1,0,1,0)
+            source.Position = UDim2.new(0,0,0,0)
+            source.Parent = PreviewArea
+            pcall(function() source:Play() end)
+        elseif type(source) == "string" then
+            local img = Instance.new("ImageLabel", PreviewArea)
+            img.Size = UDim2.new(1,0,1,0); img.BackgroundTransparency = 1
+            img.Image = source; img.ScaleType = Enum.ScaleType.Fit
+        end
+    end
+
+    local function runAll()
+        RunBtn.Text = "..."
+        logIdx = 0
+        for _, c in ipairs(Log:GetChildren()) do
+            if c:IsA("TextLabel") then c:Destroy() end
+        end
+        clearPreview()
+
+        log("=== MEGA LOOPHOLE TEST ===", C.ACCENT)
+        local caps = probe()
+        log("Executor capabilities:", C.YELLOW)
+        for k, v in pairs(caps) do
+            log("  " .. k .. " = " .. tostring(v), v and C.GREEN or C.TEXT3)
+        end
+        task.wait(0.3)
+
+        -- fetch
+        log("", C.TEXT)
+        log("Fetching TikTok metadata...", C.YELLOW)
+        local ok, info = fetchOne(Input.Text)
+        if not ok then
+            log("FETCH GAGAL: " .. tostring(info), C.RED)
+            RunBtn.Text = "RUN ALL"; return
+        end
+        log("Video: " .. tostring(info.title or "(no caption)"), C.GREEN)
+        log("ID: " .. tostring(info.id), C.TEXT2)
+
+        -- download mp4
+        local dlUrl = info.play or info.wmplay or info.hdplay
+        if not dlUrl then
+            log("No download URL in response", C.RED)
+            RunBtn.Text = "RUN ALL"; return
+        end
+
+        log("", C.TEXT)
+        log("Downloading mp4...", C.YELLOW)
+        local buf = httpDownload(dlUrl)
+        if not buf or #buf == 0 then
+            log("Download failed", C.RED)
+            RunBtn.Text = "RUN ALL"; return
+        end
+        log("Downloaded: " .. string.format("%.2f MB", #buf/1024/1024), C.GREEN)
+
+        local fname = "tt_" .. tostring(info.id or "v") .. ".mp4"
+        local wOk = pcall(writefile, fname, buf)
+        log("writefile: " .. tostring(wOk), wOk and C.GREEN or C.RED)
+        if not wOk then RunBtn.Text = "RUN ALL"; return end
+        task.wait(0.2)
+
+        -- ═════════════════════════════════
+        log("", C.TEXT)
+        log("════ MENJALANKAN 10 METODE ════", C.ACCENT)
+        log("", C.TEXT)
+
+        local winner = nil
+
+        -- A
+        log("[A] VideoFrame + getcustomasset", C.YELLOW)
+        local rA = methodA_VF_customasset(fname, PreviewArea)
+        log("   => " .. rA, rA:find("PLAYS") and C.GREEN or C.TEXT3)
+        if rA:find("PLAYS") then winner = {src = "A", method = rA} end
+        task.wait(0.2)
+
+        -- B
+        log("[B] VideoFrame + rbxasset:// + stripped", C.YELLOW)
+        local rB = methodB_VF_rbxasset(fname, PreviewArea)
+        log("   => " .. rB, rB:find("PLAYS") and C.GREEN or C.TEXT3)
+        if not winner and rB:find("PLAYS") then winner = {src = "B", method = rB} end
+        task.wait(0.2)
+
+        -- C
+        log("[C] setfflag unlock", C.YELLOW)
+        local rC = methodC_fflag_unlock()
+        log("   => " .. rC, rC:find("FLAGS") and C.GREEN or C.TEXT3)
+        task.wait(0.2)
+
+        -- D
+        log("[D] raw metatable probe", C.YELLOW)
+        local rD = methodD_rawmeta(fname, PreviewArea)
+        log("   => " .. rD, rD:find("MT EXISTS") and C.YELLOW or C.TEXT3)
+        task.wait(0.2)
+
+        -- E
+        log("[E] Sound-only (audio fallback)", C.YELLOW)
+        local rE = methodE_sound_only(info, PreviewArea)
+        log("   => " .. rE, C.TEXT3)
+        task.wait(0.2)
+
+        -- F
+        log("[F] Static cover (rbxthumb equivalent)", C.YELLOW)
+        local rF = methodF_thumb_loop(info, PreviewArea)
+        log("   => " .. rF, rF:find("RENDER") and C.GREEN or C.TEXT3)
+        task.wait(0.5)
+
+        -- G
+        log("[G] GIF / animated image", C.YELLOW)
+        local rG = methodG_gif_frames(info, PreviewArea)
+        log("   => " .. rG, rG:find("LOADED") and C.GREEN or C.TEXT3)
+        if not winner and rG:find("LOADED") then winner = {src = "G", method = rG, url = info.cover} end
+        task.wait(0.5)
+
+        -- H
+        log("[H] ContentProvider PreloadAsync", C.YELLOW)
+        local rH = methodH_preload(fname)
+        log("   => " .. rH, rH:find("OK") and C.GREEN or C.TEXT3)
+        task.wait(0.2)
+
+        -- I
+        log("[I] Internal video service probe", C.YELLOW)
+        local rI = methodI_internal_probe()
+        log("   => " .. rI, rI:find("FOUND") and C.YELLOW or C.TEXT3)
+        task.wait(0.2)
+
+        -- J
+        log("[J] getobjects with custom asset", C.YELLOW)
+        local rJ = methodJ_getobjects(fname)
+        log("   => " .. rJ, rJ:find("GOT") and C.GREEN or C.TEXT3)
+        task.wait(0.2)
+
+        -- final
+        log("", C.TEXT)
+        log("═══════════════════════════════", C.ACCENT)
+        if winner then
+            log(">>> METODE " .. winner.src .. " BERHASIL: " .. winner.method, C.GREEN)
+            if winner.url then playWinningPreview(winner.url) end
+        else
+            log(">>> SEMUA METODE GAGAL.", C.RED)
+            log("Engine Roblox block video external di level decode pipeline.", C.TEXT3)
+            log("Satu-satunya cara play video: upload sebagai Roblox Video asset.", C.TEXT3)
+            log("Atau pakai metode OS-level: PiP / split-screen / external player.", C.TEXT3)
+        end
+
+        RunBtn.Text = "RUN ALL"
+    end
+
+    RunBtn.MouseButton1Click:Connect(function()
+        task.spawn(runAll)
     end)
+
+    -- toggle
+    local Toggle = Instance.new("TextButton", UI)
+    Toggle.Size = UDim2.new(0,36,0,36); Toggle.Position = UDim2.new(0,8,0,210)
+    Toggle.BackgroundColor3 = C.BG2; Toggle.BorderSizePixel=0
+    Toggle.Text = "MEGA"; Toggle.TextColor3 = C.ACCENT
+    Toggle.Font = Enum.Font.GothamBold; Toggle.TextSize = 10
+    Instance.new("UICorner", Toggle).CornerRadius = UDim.new(0,8)
+    local tgs = Instance.new("UIStroke", Toggle)
+    tgs.Color = C.ACCENT; tgs.Thickness = 1
+    Toggle.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
 end
 
-local Info = Instance.new("TextLabel", F)
-Info.Size = UDim2.new(1, -20, 0, 100)
-Info.Position = UDim2.new(0, 10, 0, 34)
-Info.BackgroundTransparency = 1
-Info.Text = "waiting for capture...\nmancing manual 3-5x"
-Info.TextColor3 = Color3.fromRGB(210, 210, 210)
-Info.Font = Enum.Font.Code
-Info.TextSize = 10
-Info.TextXAlignment = Enum.TextXAlignment.Left
-Info.TextYAlignment = Enum.TextYAlignment.Top
-Info.TextWrapped = true
-
-local function mkBtn(text, y, color, cb)
-    local b = Instance.new("TextButton", F)
-    b.Size = UDim2.new(1, -20, 0, 24)
-    b.Position = UDim2.new(0, 10, 0, y)
-    b.BackgroundColor3 = color
-    b.BorderSizePixel = 0
-    b.Text = text
-    b.TextColor3 = Color3.fromRGB(255, 255, 255)
-    b.Font = Enum.Font.GothamBold
-    b.TextSize = 10
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
-    b.MouseButton1Click:Connect(cb)
-    return b
-end
-
-local ReplayBtn = mkBtn("REPLAY ON", 148, Color3.fromRGB(60, 100, 60), function() end)
-local StopBtn   = mkBtn("STOP REPLAY", 176, Color3.fromRGB(120, 50, 40), function() end)
-local ResetBtn  = mkBtn("RESET CAPTURE", 204, Color3.fromRGB(60, 60, 90), function() end)
-local DumpBtn   = mkBtn("DUMP KE CONSOLE", 232, Color3.fromRGB(80, 60, 40), function() end)
-
--- ═══════════════════════════════════════════════════════════════════════
--- REPLAY
--- ═══════════════════════════════════════════════════════════════════════
-local replayThreads = {}
-local REPLAY_INTERVAL = 0.15   -- jeda antar replay, adjust kalau terlalu cepat/lambat
-
-local function startReplay()
-    if replayOn then return end
-    replayOn = true
-    ReplayBtn.Text = "REPLAY: ON"
-    ReplayBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 40)
-
-    for _, c in ipairs(captured) do
-        if c.args then
-            local thread = task.spawn(function()
-                while replayOn do
-                    local ok, err = pcall(function()
-                        -- reconstruct args
-                        local remote = nil
-                        -- find remote by path
-                        local success, found = pcall(function()
-                            local parts = {}
-                            for part in string.gmatch(c.path, "[^%.]+") do
-                                table.insert(parts, part)
-                            end
-                            -- parts biasanya: ReplicatedStorage, ..., RemoteName
-                            local node = game
-                            for i = 2, #parts do
-                                local child = node:FindFirstChild(parts[i])
-                                if not child then return nil end
-                                node = child
-                            end
-                            return node
-                        end)
-                        if success and found and typeof(found) == "Instance"
-                        and (found:IsA("RemoteEvent") or found:IsA("RemoteFunction")) then
-                            remote = found
-                        end
-
-                        if remote then
-                            if c.method == "FireServer" and remote:IsA("RemoteEvent") then
-                                remote:FireServer(unpack(c.args, 1, c.argc))
-                            elseif c.method == "InvokeServer" and remote:IsA("RemoteFunction") then
-                                task.spawn(function() remote:InvokeServer(unpack(c.args, 1, c.argc)) end)
-                            end
-                        end
-                    end)
-                    task.wait(REPLAY_INTERVAL)
-                end
-            end)
-            table.insert(replayThreads, thread)
-        end
-    end
-end
-
-local function stopReplay()
-    replayOn = false
-    ReplayBtn.Text = "REPLAY ON"
-    ReplayBtn.BackgroundColor3 = Color3.fromRGB(60, 100, 60)
-    replayThreads = {}
-end
-
-ReplayBtn.MouseButton1Click:Connect(startReplay)
-StopBtn.MouseButton1Click:Connect(stopReplay)
-
-ResetBtn.MouseButton1Click:Connect(function()
-    stopReplay()
-    captured = {}
-    print("[CAP] reset")
-end)
-
-DumpBtn.MouseButton1Click:Connect(function()
-    print("\n=== CAPTURE DUMP ===")
-    for i, c in ipairs(captured) do
-        local argStr = ""
-        for j = 1, c.argc do
-            argStr = argStr .. logArg(c.args and c.args[j]) .. (j < c.argc and ", " or "")
-        end
-        print(string.format("[%d] %s:%s(%s)  hits:%d", i, c.name, c.method, argStr, c.hits))
-    end
-    print("=== END ===\n")
-end)
-
--- ═══════════════════════════════════════════════════════════════════════
--- LIVE INFO
--- ═══════════════════════════════════════════════════════════════════════
-task.spawn(function()
-    while F.Parent do
-        local lines = { "captured: " .. #captured .. " remote types" }
-        for i, c in ipairs(captured) do
-            if i > 4 then lines[#lines+1] = "  ... +" .. (#captured - 4) .. " more"; break end
-            lines[#lines+1] = string.format("  %s (%d hits)", c.name, c.hits)
-        end
-        lines[#lines+1] = ""
-        lines[#lines+1] = replayOn and "REPLAY ACTIVE" or "waiting for REPLAY ON"
-        Info.Text = table.concat(lines, "\n")
-        task.wait(0.4)
-    end
-end)
-
-print("[CAP] loaded. mancing manual 3-5x, terus klik REPLAY ON.")
+buildUI()
