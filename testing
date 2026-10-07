@@ -1,7 +1,6 @@
 --[[
-    NANG TIKTOK v4.0 — MEGA LOOPHOLE
+    NANG TIKTOK v4.1 — MEGA LOOPHOLE (fetch fix)
     Coba 10 metode buat play TikTok di Roblox.
-    Yang berhasil, langsung play di preview panel.
 ]]
 
 local Players     = game:GetService("Players")
@@ -16,8 +15,7 @@ local API = "https://www.tikwm.com/api/"
 -- ═══════════════════════════════════════
 -- HTTP
 -- ═══════════════════════════════════════
-local function httpGet(url, opts)
-    opts = opts or {}
+local function httpGet(url)
     local fns = {
         function() if syn and syn.request then local r = syn.request({Url=url,Method="GET"}); return r and r.Body end end,
         function() if request then local r = request({Url=url,Method="GET"}); return r and r.Body end end,
@@ -45,7 +43,7 @@ local function httpDownload(url)
 end
 
 -- ═══════════════════════════════════════
--- Executor capability probes
+-- Executor probes
 -- ═══════════════════════════════════════
 local function probe()
     local caps = {}
@@ -60,7 +58,6 @@ local function probe()
     caps.webview        = (syn and type(syn.webview) == "table") or type(WebView) == "table"
     caps.fireclick      = type(fireclickdetector) == "function"
     caps.sethidden      = type(sethiddenproperty) == "function"
-    caps.setrawprop     = type(sethiddenproperty) == "function" or (syn and type(syn.setrawmetatable) == "function")
     caps.newcclosure    = type(newcclosure) == "function"
     caps.hookfunc       = type(hookfunction) == "function"
     caps.hookmeta       = type(hookmetamethod) == "function"
@@ -87,38 +84,50 @@ local function toCustomAsset(path)
 end
 
 -- ═══════════════════════════════════════
--- Fetch TikTok metadata
+-- Fetch TikTok metadata (FIXED)
 -- ═══════════════════════════════════════
 local function fetchOne(input)
     input = tostring(input or ""):gsub("^%s+",""):gsub("%s+$","")
-    if input == "" then return false, "Kosong" end
+    if input == "" then return false, "Input kosong — isi dulu" end
 
     local endpoint
-    if input:match("^vt%.tiktok%.com") or input:match("^vm%.tiktok%.com") then
-        endpoint = API .. "?url=" .. HttpService:UrlEncode("https://" .. input)
-    elseif input:match("^https?://") then
-        endpoint = API .. "?url=" .. HttpService:UrlEncode(input)
+    local isUrl = input:match("^vt%.tiktok%.com")
+                 or input:match("^vm%.tiktok%.com")
+                 or input:match("^https?://")
+                 or input:match("tiktok%.com")
+
+    if isUrl then
+        local url = input
+        if not url:match("^https?://") then url = "https://" .. url end
+        endpoint = API .. "?url=" .. HttpService:UrlEncode(url)
     else
-        endpoint = API .. "?unique_id=" .. HttpService:UrlEncode(input:gsub("^@","")) .. "&count=1"
+        local uname = input:gsub("^@", ""):gsub("%s.*$", "")
+        if uname == "" then return false, "Username kosong" end
+        endpoint = "https://www.tikwm.com/api/user/posts?unique_id="
+            .. HttpService:UrlEncode(uname) .. "&count=1"
     end
 
     local body = httpGet(endpoint)
-    if not body then return false, "Gagal konek" end
+    if not body then return false, "Gagal konek API (cek internet)" end
+
     local ok, d = pcall(function() return HttpService:JSONDecode(body) end)
-    if not ok or type(d) ~= "table" then return false, "Response invalid" end
-    if d.code ~= 0 then return false, tostring(d.msg or "err " .. tostring(d.code)) end
+    if not ok or type(d) ~= "table" then return false, "Response bukan JSON" end
+    if d.code ~= 0 then return false, tostring(d.msg or ("API err " .. tostring(d.code))) end
+
     local data = d.data
     if type(data) == "table" and type(data.videos) == "table" and data.videos[1] then
         return true, data.videos[1]
     end
-    return true, data
+    if type(data) == "table" and data.id then
+        return true, data
+    end
+    return false, "Tidak ada video di response"
 end
 
 -- ═══════════════════════════════════════
 -- METHOD TESTERS
 -- ═══════════════════════════════════════
 
--- METODE A: VideoFrame + getcustomasset raw
 local function methodA_VF_customasset(mp4path, parent)
     local asset = toCustomAsset(mp4path)
     if not asset then return "NO GETCUSTOMASSET" end
@@ -136,7 +145,6 @@ local function methodA_VF_customasset(mp4path, parent)
     return played and ("PLAYS @ " .. string.format("%.2f", t)) or (ok and "SET OK, NO PLAY" or "SET FAIL")
 end
 
--- METODE B: VideoFrame + rbxasset:// + getcustomasset stripped
 local function methodB_VF_rbxasset(mp4path, parent)
     local asset = toCustomAsset(mp4path)
     if not asset then return "NO GETCUSTOMASSET" end
@@ -156,8 +164,7 @@ local function methodB_VF_rbxasset(mp4path, parent)
     return played and ("PLAYS @ " .. string.format("%.2f", t)) or (ok and "SET OK, NO PLAY" or "SET FAIL")
 end
 
--- METODE C: setfflag unlock + VideoFrame
-local function methodC_fflag_unlock(parent)
+local function methodC_fflag_unlock()
     local caps = probe()
     if not caps.setfflag then return "NO SETFFLAG" end
     local flags = {
@@ -170,10 +177,9 @@ local function methodC_fflag_unlock(parent)
     for k, v in pairs(flags) do
         pcall(setfflag, k, v)
     end
-    return "FLAGS SET (but need video test)"
+    return "FLAGS SET (5 ditembak)"
 end
 
--- METODE D: Raw metatable hook on VideoFrame.Source setter
 local function methodD_rawmeta(mp4path, parent)
     local caps = probe()
     if not caps.getrawmeta then return "NO GETRAWMETATABLE" end
@@ -182,21 +188,14 @@ local function methodD_rawmeta(mp4path, parent)
     vf.Parent = parent
     local mt = getrawmetatable(vf)
     if not mt then pcall(function() vf:Destroy() end); return "NO MT" end
-    local orig = rawget(mt, "__index")
-    -- this is a probe, don't actually break things
     pcall(function() vf:Destroy() end)
-    return "MT EXISTS, need deeper probe"
+    return "MT EXISTS"
 end
 
--- METODE E: Sound + cover image (audio plays, visual is static)
 local function methodE_sound_only(info, parent)
-    if not info or not info.music_info or not info.music_info.play then
-        -- try video's play url directly as sound
-    end
-    return "SKIP (but audio-only possible via Sound.SoundId = rbxassetid)"
+    return "SKIP (audio via Sound.SoundId = rbxassetid needed)"
 end
 
--- METODE F: rbxthumb trick with cover
 local function methodF_thumb_loop(info, parent)
     if not info or not info.cover then return "NO COVER" end
     local img = Instance.new("ImageLabel")
@@ -205,32 +204,18 @@ local function methodF_thumb_loop(info, parent)
     img.Image = info.cover
     img.ScaleType = Enum.ScaleType.Crop
     img.Parent = parent
-    return "COVER RENDERED (static)"
+    task.wait(0.8)
+    local loaded = false
+    pcall(function() loaded = img.IsLoaded end)
+    return loaded and "COVER RENDER OK" or "COVER LOADING/FAIL"
 end
 
--- METODE G: Frame animation from GIF
--- Convert mp4 to GIF via public API, parse GIF client-side, cycle frames
 local function methodG_gif_frames(info, parent)
-    -- tikwm might return an animated cover for some posts
-    -- otherwise use external GIF conversion
-
-    -- try to get GIF URL from tikwm
-    local gifUrl = info and (info.animated_cover or info.ai_dynamic_cover or info.cover_gif)
+    local gifUrl = info and (info.animated_cover or info.ai_dynamic_cover)
     if not gifUrl and info and info.id then
-        -- try constructing tiktok GIF URL patterns
-        local patterns = {
-            "https://p16-sign-va.tiktokcdn.com/tos-maliva-p-0068/" .. tostring(info.id) .. "~tplv-tiktokx-origin.image",
-            "https://p16-sign-va.tiktokcdn.com/obj/tos-maliva-p-0068/" .. tostring(info.id) .. "?a=1988",
-        }
-        for _, p in ipairs(patterns) do
-            gifUrl = p
-            break
-        end
+        gifUrl = "https://p16-sign-va.tiktokcdn.com/tos-maliva-p-0068/" .. tostring(info.id) .. "~tplv-tiktokx-origin.image"
     end
-
     if not gifUrl then return "NO GIF SOURCE" end
-
-    -- render as rapid-cycling ImageLabel (if animated webp/gif somehow renders)
     local img = Instance.new("ImageLabel")
     img.Size = UDim2.new(0,120,0,180); img.Position = UDim2.new(0,0,0,0)
     img.BackgroundColor3 = Color3.fromRGB(20,20,30); img.BorderSizePixel = 0
@@ -240,10 +225,9 @@ local function methodG_gif_frames(info, parent)
     task.wait(1.2)
     local loaded = false
     pcall(function() loaded = img.IsLoaded end)
-    return loaded and "IMAGE LOADED" or "IMAGE LOAD FAIL (or no anim support)"
+    return loaded and "IMAGE LOADED" or "IMAGE LOAD FAIL"
 end
 
--- METODE H: ContentProvider PreloadAsync with custom asset
 local function methodH_preload(mp4path)
     local asset = toCustomAsset(mp4path)
     if not asset then return "NO GETCUSTOMASSET" end
@@ -256,13 +240,8 @@ local function methodH_preload(mp4path)
     return ok and "PRELOAD OK" or "PRELOAD ERR"
 end
 
--- METODE I: Direct internal video service call (probe)
 local function methodI_internal_probe()
-    local services = {
-        "VideoCaptureService",
-        "VideoService",
-        "VideoFrameService",
-    }
+    local services = { "VideoCaptureService", "VideoService", "VideoFrameService" }
     local found = {}
     for _, name in ipairs(services) do
         local ok, s = pcall(function() return game:GetService(name) end)
@@ -272,9 +251,7 @@ local function methodI_internal_probe()
     return "FOUND: " .. table.concat(found, ", ")
 end
 
--- METODE J: getobjects / InsertService with local file
 local function methodJ_getobjects(mp4path)
-    local caps = probe()
     local asset = toCustomAsset(mp4path)
     if not asset then return "NO GETCUSTOMASSET" end
     local ok, objs = pcall(function() return game:GetObjects(asset) end)
@@ -351,7 +328,6 @@ local function buildUI()
     Instance.new("UICorner", Close).CornerRadius = UDim.new(0,6)
     Close.MouseButton1Click:Connect(function() UI:Destroy() end)
 
-    -- input row
     local Input = Instance.new("TextBox", Main)
     Input.Size = UDim2.new(1, -110, 0, 34); Input.Position = UDim2.new(0, 14, 0, 58)
     Input.BackgroundColor3 = C.BG3; Input.BorderSizePixel = 0
@@ -371,7 +347,6 @@ local function buildUI()
     RunBtn.Font = Enum.Font.GothamBold; RunBtn.TextSize = 11
     Instance.new("UICorner", RunBtn).CornerRadius = UDim.new(0,8)
 
-    -- log
     local LogFrame = Instance.new("Frame", Main)
     LogFrame.Size = UDim2.new(0.58, -18, 1, -118); LogFrame.Position = UDim2.new(0, 14, 0, 102)
     LogFrame.BackgroundColor3 = C.CARD; LogFrame.BorderSizePixel = 0
@@ -388,7 +363,6 @@ local function buildUI()
     local LL = Instance.new("UIListLayout", Log)
     LL.Padding = UDim.new(0,3)
 
-    -- preview
     local Preview = Instance.new("Frame", Main)
     Preview.Size = UDim2.new(0.42, -18, 1, -118); Preview.Position = UDim2.new(0.58, 4, 0, 102)
     Preview.BackgroundColor3 = C.CARD; Preview.BorderSizePixel = 0
@@ -419,7 +393,7 @@ local function buildUI()
         l.Font = Enum.Font.Code; l.TextSize = 10
         l.TextXAlignment = Enum.TextXAlignment.Left
         l.TextWrapped = true
-        task.wait()  -- yield buat scroll
+        task.wait()
         Log.CanvasPosition = Vector2.new(0, 1e6)
         return l
     end
@@ -460,7 +434,6 @@ local function buildUI()
         end
         task.wait(0.3)
 
-        -- fetch
         log("", C.TEXT)
         log("Fetching TikTok metadata...", C.YELLOW)
         local ok, info = fetchOne(Input.Text)
@@ -471,7 +444,6 @@ local function buildUI()
         log("Video: " .. tostring(info.title or "(no caption)"), C.GREEN)
         log("ID: " .. tostring(info.id), C.TEXT2)
 
-        -- download mp4
         local dlUrl = info.play or info.wmplay or info.hdplay
         if not dlUrl then
             log("No download URL in response", C.RED)
@@ -493,77 +465,65 @@ local function buildUI()
         if not wOk then RunBtn.Text = "RUN ALL"; return end
         task.wait(0.2)
 
-        -- ═════════════════════════════════
         log("", C.TEXT)
         log("════ MENJALANKAN 10 METODE ════", C.ACCENT)
         log("", C.TEXT)
 
         local winner = nil
 
-        -- A
         log("[A] VideoFrame + getcustomasset", C.YELLOW)
         local rA = methodA_VF_customasset(fname, PreviewArea)
         log("   => " .. rA, rA:find("PLAYS") and C.GREEN or C.TEXT3)
         if rA:find("PLAYS") then winner = {src = "A", method = rA} end
         task.wait(0.2)
 
-        -- B
         log("[B] VideoFrame + rbxasset:// + stripped", C.YELLOW)
         local rB = methodB_VF_rbxasset(fname, PreviewArea)
         log("   => " .. rB, rB:find("PLAYS") and C.GREEN or C.TEXT3)
         if not winner and rB:find("PLAYS") then winner = {src = "B", method = rB} end
         task.wait(0.2)
 
-        -- C
         log("[C] setfflag unlock", C.YELLOW)
         local rC = methodC_fflag_unlock()
         log("   => " .. rC, rC:find("FLAGS") and C.GREEN or C.TEXT3)
         task.wait(0.2)
 
-        -- D
         log("[D] raw metatable probe", C.YELLOW)
         local rD = methodD_rawmeta(fname, PreviewArea)
         log("   => " .. rD, rD:find("MT EXISTS") and C.YELLOW or C.TEXT3)
         task.wait(0.2)
 
-        -- E
         log("[E] Sound-only (audio fallback)", C.YELLOW)
         local rE = methodE_sound_only(info, PreviewArea)
         log("   => " .. rE, C.TEXT3)
         task.wait(0.2)
 
-        -- F
-        log("[F] Static cover (rbxthumb equivalent)", C.YELLOW)
+        log("[F] Static cover", C.YELLOW)
         local rF = methodF_thumb_loop(info, PreviewArea)
         log("   => " .. rF, rF:find("RENDER") and C.GREEN or C.TEXT3)
         task.wait(0.5)
 
-        -- G
         log("[G] GIF / animated image", C.YELLOW)
         local rG = methodG_gif_frames(info, PreviewArea)
         log("   => " .. rG, rG:find("LOADED") and C.GREEN or C.TEXT3)
         if not winner and rG:find("LOADED") then winner = {src = "G", method = rG, url = info.cover} end
         task.wait(0.5)
 
-        -- H
         log("[H] ContentProvider PreloadAsync", C.YELLOW)
         local rH = methodH_preload(fname)
         log("   => " .. rH, rH:find("OK") and C.GREEN or C.TEXT3)
         task.wait(0.2)
 
-        -- I
         log("[I] Internal video service probe", C.YELLOW)
         local rI = methodI_internal_probe()
         log("   => " .. rI, rI:find("FOUND") and C.YELLOW or C.TEXT3)
         task.wait(0.2)
 
-        -- J
         log("[J] getobjects with custom asset", C.YELLOW)
         local rJ = methodJ_getobjects(fname)
         log("   => " .. rJ, rJ:find("GOT") and C.GREEN or C.TEXT3)
         task.wait(0.2)
 
-        -- final
         log("", C.TEXT)
         log("═══════════════════════════════", C.ACCENT)
         if winner then
@@ -583,7 +543,6 @@ local function buildUI()
         task.spawn(runAll)
     end)
 
-    -- toggle
     local Toggle = Instance.new("TextButton", UI)
     Toggle.Size = UDim2.new(0,36,0,36); Toggle.Position = UDim2.new(0,8,0,210)
     Toggle.BackgroundColor3 = C.BG2; Toggle.BorderSizePixel=0
